@@ -7,6 +7,12 @@ from matplotlib.patches import ConnectionPatch
 from matplotlib.widgets import Button, TextBox
 import matplotlib.patheffects as PathEffects
 
+import plotly.express as px
+import plotly.graph_objects as go
+from ipywidgets import widgets, interactive, HBox, VBox,Output,Layout
+
+import pandas as pd
+from scipy.stats import binom
 
 from sklearn.neighbors import NearestNeighbors
 
@@ -279,6 +285,149 @@ class SpatialGraph():
 
                 # except:
                 #     print(f'Failed to assign text label to {g}')
+    def umap_js(self, color_prop='c_genes'):
+                
+        n_bars=20
+
+        f_scatter = go.FigureWidget(px.imshow(np.repeat(self.sdata.pixel_maps[0].data[:,:,None],3,axis=-1,),
+                                x=np.linspace(self.sdata.background.extent[0],self.sdata.background.extent[1],self.sdata.background.data.shape[0]),
+                                y=np.linspace(self.sdata.background.extent[2],self.sdata.background.extent[3],self.sdata.background.data.shape[1])
+                                ),
+                        layout=Layout(border='solid 4px',width='100%'))
+
+        trace_scatter=go.Scattergl(x=self.sdata.x,
+                                y=self.sdata.y,
+                                mode='markers', 
+                                marker=dict(color=self.sdata.obsc.project(color_prop)),
+                                hoverinfo='none',meta={'name':'tissue-scatter'},
+                                unselected={'marker':{'color':'black','opacity':0.2}},
+                                )
+
+        f_scatter.add_trace(trace_scatter)
+
+        f_umap = go.FigureWidget(go.Scattergl(x=self.sdata.graph.umap[:,0],
+                                            y=self.sdata.graph.umap[:,1],
+                                            mode='markers', 
+                                            marker=dict(color=self.sdata.obsc.project(color_prop)),
+                                            unselected={'marker':{'color':'black','opacity':0.2}},
+                                            hoverinfo='none',meta={'name':'umap-scatter'}),
+                                )
+
+        colors=self.sdata.obsc.loc[self.sdata.stats.sort_values('counts')[-n_bars:].index,color_prop].values
+
+        w_bars=go.Bar(                  x=self.sdata.stats.sort_values('counts')[-n_bars:].index,
+                                        y=self.sdata.stats.sort_values('counts')[-n_bars:]['counts'],
+                                        marker={'color':['rgb'+str(tuple((np.array(c)*256).astype(int))) for c in  colors]},
+                                    )
+        f_bars = go.FigureWidget(w_bars)
+
+        f_bars.data[0]['showlegend']=False
+
+
+
+        w_bars_ratio_up=go.Bar(         x=self.sdata.stats.sort_values('counts')[-n_bars:].index,
+                                        y=[0]*n_bars,
+                                        marker={'color':['rgb'+str(tuple((np.array(c)*256).astype(int))) for c in  colors]},
+                                    )
+        f_bars_ratio_up = go.FigureWidget(w_bars_ratio_up)
+
+        f_bars_ratio_up.data[0]['showlegend']=False
+
+
+
+        w_bars_binom=go.Bar(         x=self.sdata.stats.sort_values('counts')[-n_bars:].index,
+                                        y=[0]*n_bars,
+                                        marker={'color':['rgb'+str(tuple((np.array(c)*256).astype(int))) for c in  colors]},
+                                    )
+        f_bars_binom = go.FigureWidget(w_bars_binom)
+
+        f_bars_binom.data[0]['showlegend']=False
+
+        out = widgets.Output(layout={'border': '1px solid black'})
+
+        def update_bars(plot,points,selector):
+            
+            if plot['meta']['name']=='tissue-scatter':
+                f_umap.data[0].selectedpoints=plot.selectedpoints
+                
+            else:
+                f_scatter.data[1].selectedpoints=plot.selectedpoints
+                
+            subset=self.sdata[np.array(points.point_inds)]
+            
+            colors=subset.obsc.loc[subset.stats.sort_values('counts')[-n_bars:].index,color_prop].values
+            colors=['rgb'+str(tuple((np.array(c)*256).astype(int))) for c in  colors]
+            ys = subset.stats.sort_values('counts')[-n_bars:]['counts']
+            xs = subset.stats.sort_values('counts')[-n_bars:].index
+            
+            f_bars.data[0].marker.color=colors
+            f_bars.data[0].x=xs
+            f_bars.data[0].y=ys
+            
+            vals= (subset.stats.counts)/ (self.sdata.stats.loc[subset.stats.index].counts)
+            idcs = np.argsort(vals)
+            
+            colors=subset.obsc[color_prop][idcs]
+            colors=['rgb'+str(tuple((np.array(c)*256).astype(int))) for c in  colors]
+            ys = vals[idcs]
+            xs = subset.stats.index[idcs]
+            
+            f_bars_ratio_up.data[0].marker.color=colors[-n_bars:]
+            f_bars_ratio_up.data[0].x=xs[-n_bars:]
+            f_bars_ratio_up.data[0].y=(ys[-n_bars:])
+            
+            vals= binom.cdf(subset.stats.counts,self.sdata.stats.loc[subset.stats.index].counts,len(subset)/len(self.sdata))
+            idcs = np.argsort(vals)
+            
+            colors=subset.obsc[color_prop][idcs]
+            colors=['rgb'+str(tuple((np.array(c)*256).astype(int))) for c in  colors]
+            ys = vals[idcs]
+            xs = subset.stats.index[idcs]
+            
+            f_bars_binom.data[0].marker.color=colors[-n_bars:]
+            f_bars_binom.data[0].x=xs[-n_bars:]
+            f_bars_binom.data[0].y=(ys[-n_bars:])
+            
+            
+            
+        f_scatter.data[1].on_selection(update_bars)
+        f_umap.data[0].on_selection(update_bars)
+
+        text_field=widgets.Text(
+            value='selection1',
+            placeholder='Label for storing',
+            description='Name:',
+            disabled=False
+        )
+
+        store_button = widgets.Button(
+            description='store selection',
+            disabled=False,
+            button_style='', # 'success', 'info', 'warning', 'danger' or ''
+        )
+            
+        def store_selection(event):
+            self.sdata[text_field.value]=pd.Series(np.arange(len(self.sdata))).isin(f_umap.data[0].selectedpoints)
+            []
+        store_button.on_click(store_selection)
+            
+        reset_button = widgets.Button(
+            description='reset selection',
+            disabled=False,
+            button_style='', # 'success', 'info', 'warning', 'danger' or ''
+        )
+
+
+        return widgets.VBox([widgets.HBox([f_scatter,f_umap] ,layout=Layout(display='flex',width='100%',height='80%',border='red solid 1px',align_items='stretch',justify_content='space-around',flex_direction='row')),
+                            widgets.HBox([widgets.HBox([f_bars,f_bars_ratio_up,f_bars_binom],layout=Layout(display='flex',width='80%')),
+                                        widgets.VBox([widgets.HBox([text_field,
+                                                                    store_button
+                                                                    ]),widgets.HBox([reset_button])],layout=Layout(display='flex',width='20%',height='100%',border='red solid 1px',justify_content='space-around',flex_direction='column')
+                                                    )]
+                                        )]
+                        
+                        ,layout=Layout(width='100%',height='80vh',background='red',border='solid 1px'))
+
 
     def umap_interactive(self, color_prop=None, umap_kwargs={'alpha':0.1, 'marker':'x','text_kwargs':{'fontsize':10},'legend':False},
                                 scatter_kwargs={'marker':'x','alpha':0.5,}):
@@ -302,17 +451,17 @@ class SpatialGraph():
 
         ax1 = plt.subplot2grid((3, 2), (0, 0),2,1)
         
-        sc2,_,_ = self.sdata.scatter(axd=ax1,s=np.zeros((len(self.sdata),))+10,**scatter_kwargs)
+        sc2,_,_ = self.sdata.scatter(axd=ax1,s=np.zeros((len(self.sdata),))+10,**(scatter_kwargs|{'animated':False}))
 
         ax2 = plt.subplot2grid((3, 2), (0, 1),2,1)  
         self.sdata.graph.plot_umap(**umap_kwargs)
 
-        circle=plt.Circle((0,0),radius, color='w',fill=False, linestyle='--')
+        circle=plt.Circle((0,0),radius, color=plt.rcParams['axes.edgecolor'],fill=False, linestyle='--',animated=False)
         ax2.add_artist(circle)
 
         ax3 = plt.subplot2grid((3, 2), (2, 0),1,1)
 
-        bars=ax3.bar(range(10),np.zeros((10,)))
+        bars=ax3.bar(range(10),np.zeros((10,)),animated=False)
         plt.xticks(range(10),['-']*10,rotation=90)
         ax3.set_ylim(0,1)
         ax3.set_ylabel('molecule counts')
@@ -348,10 +497,21 @@ class SpatialGraph():
                 txt.set_text(f'Label {text_box_label.text} already exists. Click again to overwrite.')
                 
 
-            fig.canvas.draw()
+            # fig.canvas.draw()
 
         btn_submit=Button(ax6,'store selection',color='rosybrown',hovercolor='lightcoral')
         btn_submit.on_clicked(store_selection)
+
+        bg = fig.canvas.copy_from_bbox(fig.bbox)
+
+        fig.canvas.draw()
+        plt.show(block=False)
+        plt.pause(0.1)
+
+        ax2.draw_artist(circle)
+        ax2.figure.canvas.draw_idle()
+        # fig.canvas.blit(fig.bbox)
+        # fig.canvas.flush_events()
 
         def on_click(event):
             click_coords[0]=event.xdata
@@ -386,10 +546,11 @@ class SpatialGraph():
 
                 update_bars(dist<radius)
                         
-                fig.canvas.draw()
+                fig.canvas.blit(fig.bbox)
+                fig.canvas.flush_events()
+                # fig.canvas.draw()
                 
-                
-        
+       
         update_bars(dist<radius)
 
         plt.connect('button_press_event', on_click)

@@ -902,7 +902,7 @@ def hbar_compare(stat1, stat2, labels=None, text_display_threshold=0.02, c=None)
         bars = plt.bar([0, 1], [cum1[i]-cum1[i-1], cum2[i]-cum2[i-1]],
                        bottom=[cum1[i-1], cum2[i-1], ], width=0.4, color=c[i-1])
         clr = bars.get_children()[0].get_facecolor()
-        plt.plot((0.2, 0.8), (cum1[i], cum2[i]), c='k')
+        plt.plot((0.2,0.8),(cum1[i],cum2[i]),c=plt.rcParams['axes.facecolor'],alpha=0.7)
         plt.fill_between(
             (0.2, 0.8), (cum1[i], cum2[i]), (cum1[i-1], cum2[i-1]), color=clr, alpha=0.2)
 
