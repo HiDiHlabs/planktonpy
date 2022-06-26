@@ -7,6 +7,7 @@ import pandas as pd
 import random
 import scipy
 import anndata
+from stats import co_occurrence
 import scanpy as sc
 import collections
 from scipy import sparse
@@ -236,8 +237,12 @@ class PointStatistics(GeneStatistics):
             index=genes)
 
         sdata['gene_id'] = inverse
+        self.sdata = sdata
 
         sdata.graph = SpatialGraph(self)
+
+    def co_occurrence(self, category=None, resolution=5, max_radius=None, linear_steps=20,):
+        return co_occurrence(self.sdata, resolution=resolution, max_radius=max_radius, linear_steps=linear_steps, category=category)
 
 
 class ScStatistics(GeneStatistics):
@@ -578,13 +583,12 @@ class SpatialData(pd.DataFrame):
         if c is None:
             if color is None:
                 c = self.obsc.project('c_'+color_prop)
-                
-                
 
         if legend:
             labels = sorted(self.obsc[color_prop].unique())
             # print(labels)
-            clrs = [self.obsc[(self.obsc[color_prop]==l)]['c_'+color_prop][0] for l in labels]
+            clrs = [self.obsc[(self.obsc[color_prop] == l)]
+                    ['c_'+color_prop][0] for l in labels]
 
             handles = [plt.scatter([], [], color=c) for c in clrs]
             handle_legend = plt.legend(handles, labels)
@@ -858,7 +862,7 @@ class SpatialData(pd.DataFrame):
 
     def save(self, path):
         pickle.dump({'sdata': self, 'graph': self.graph,
-                    'obsc': self.obsc, 'pixel_maps':self.pixel_maps}, open(path, "wb"))
+                    'obsc': self.obsc, 'pixel_maps': self.pixel_maps}, open(path, "wb"))
 
 # here starts plotting.py
 
@@ -866,15 +870,15 @@ class SpatialData(pd.DataFrame):
 def load(path):
     data = pickle.load(open(path, "rb"))
     sdata = SpatialData(data['sdata']['g'], data['sdata']
-                        ['x'], data['sdata']['y'],pixel_maps=data['pixel_maps'])
+                        ['x'], data['sdata']['y'], pixel_maps=data['pixel_maps'])
     print(data['sdata'].columns)
 
-    for i,c in enumerate(data['sdata'].columns[4:]):
+    for i, c in enumerate(data['sdata'].columns[4:]):
         sdata[c] = data['sdata'][c]
     sdata.graph = data['graph']
-    sdata.graph.sdata=sdata
+    sdata.graph.sdata = sdata
     sdata.obsc = data['obsc']
-    sdata.obsc.sdata=sdata
+    sdata.obsc.sdata = sdata
     return sdata
 
 
@@ -902,7 +906,8 @@ def hbar_compare(stat1, stat2, labels=None, text_display_threshold=0.02, c=None)
         bars = plt.bar([0, 1], [cum1[i]-cum1[i-1], cum2[i]-cum2[i-1]],
                        bottom=[cum1[i-1], cum2[i-1], ], width=0.4, color=c[i-1])
         clr = bars.get_children()[0].get_facecolor()
-        plt.plot((0.2,0.8),(cum1[i],cum2[i]),c=plt.rcParams['axes.facecolor'],alpha=0.7)
+        plt.plot((0.2, 0.8), (cum1[i], cum2[i]),
+                 c=plt.rcParams['axes.facecolor'], alpha=0.7)
         plt.fill_between(
             (0.2, 0.8), (cum1[i], cum2[i]), (cum1[i-1], cum2[i-1]), color=clr, alpha=0.2)
 

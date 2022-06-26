@@ -1,6 +1,6 @@
 from scipy.signal import fftconvolve
 import numpy as np
-# import
+from scipy import signal, fft as sp_fft
 
 
 def _get_kernels(max_radius, linear_steps):
@@ -38,32 +38,37 @@ def _get_kernels(max_radius, linear_steps):
         kernel_2[kernel_2 > 1] = 1
         kernel_2[kernel_2 == 1] = kernel_1[kernel_2 == 1]
 
-        kernels.append(kernel_2)
+        kernels.append(kernel_2/kernel_2.sum())
 
     kernels = np.array(kernels)
 
     return (kernels,vals)
 
+def get_histograms(sdata, category=None,resolution=5):
 
-def get_histograms(coords1, coords2=None,resolution=5):
-    if coords2 is None:
-        coords2 = coords1
-
-    mins = np.min((coords1.min(0), coords2.min(0)), axis=0)
-    maxs = np.max((coords1.max(0), coords2.max(0)), axis=0)
+    mins = sdata.coordinates.min(0)
+    maxs = sdata.coordinates.max(0)
 
     n_bins = np.ceil(np.divide(maxs-mins, resolution)).astype(int)
 
-    return(np.histogram2d(*coords1.T, bins=n_bins, range=([mins[0], maxs[0]], [mins[1], maxs[1]])))
+    histograms=[]
+    
+    if category is None:
+        for gene in sdata.g:
+            histograms.append(np.histogram2d(*sdata[sdata.g==gene].coordinates.T, bins=n_bins, range=([mins[0], maxs[0]], [mins[1], maxs[1]]))[0])
+        
+    else:
+        for c in sdata[category].cat.categories:
+            histograms.append(np.histogram2d(*sdata[sdata[category]==c].coordinates.T, bins=n_bins, range=([mins[0], maxs[0]], [mins[1], maxs[1]]))[0])
 
+    return histograms
 
-def co_occurrence(coords1, coords2,resolution=5, max_radius=None, linear_steps=None):
-
-    hist1 = get_histograms(coords1, coords2,resolution=resolution)[0]
-    hist2 = get_histograms(coords2, coords1,resolution=resolution)[0]
+def co_occurrence(sdata, resolution=5, max_radius=400, linear_steps=5, category=None):
+    
+    hists = get_histograms(sdata, category=category)  
 
     if max_radius is None:
-        max_radius=np.ceil(np.min(hist1.shape)/4).astype(int)
+        max_radius=np.ceil(np.min(hists[0].shape)/4).astype(int)
     else:
         max_radius = np.ceil(max_radius/resolution).astype(int)
     if (linear_steps is None) or (linear_steps>=max_radius):
@@ -71,25 +76,30 @@ def co_occurrence(coords1, coords2,resolution=5, max_radius=None, linear_steps=N
 
 
     kernels,radii = _get_kernels(max_radius,linear_steps)
+  
+    co_occurrences = np.zeros((len(hists),)*2+(len(kernels),))
 
-    co_occurrences = np.zeros((2,2,len(kernels)))
+    shape = [hists[0].shape[a]+kernels[0].shape[a]-1 for a in [0,1]]
+    fshape = [sp_fft.next_fast_len(shape[a], True) for a in [0,1]]
+    
+    kernels_fft = (sp_fft.rfftn(kernels, fshape,axes=[1,2]))
+        
+        
+    for i in range(len(hists)):
+        
+        h1_fft = sp_fft.rfftn(hists[i], fshape,axes=[0,1])
+        h1_fftprod =  (h1_fft*kernels_fft)
+        h1_conv = sp_fft.irfftn(h1_fftprod,fshape,axes=[1,2])
+        h1_conv = signal._signaltools._centered(h1_conv, (len(kernels),)+hists[0].shape).copy()
+        
+        h1_product=h1_conv*hists[i]
+        co_occurrences[i,i]=h1_product.sum(axis=(1,2))
+        
+        for j in range(i+1,len(hists)):
+            h2_product=h1_conv*hists[j]
+            co_occurrences[i,j] = h2_product.sum(axis=(1,2))
+            co_occurrences[j,i]= co_occurrences[i,j]
 
-    kernel=np.zeros_like(hist1)
+    return(co_occurrences,radii*resolution,kernels)
 
-    for i,k in enumerate(kernels):
-        conved = fftconvolve(hist1,k,mode='same')
-
-        co_occurrences[0,0,i]=(conved*hist1).sum()/k.sum()
-        co_occurrences[0,1,i]=(conved*hist2).sum()/k.sum()
-
-        conved = fftconvolve(hist2,k,mode='same')
-
-        co_occurrences[1,0,i]=(conved*hist1).sum()/k.sum()
-        co_occurrences[1,1,i]=(conved*hist2).sum()/k.sum()
-
-
-
-    return co_occurrences,radii*resolution
-
-    # for k in kernels:
 
