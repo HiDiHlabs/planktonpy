@@ -18,7 +18,7 @@ class PixelMap():
         self.n_channels = 1 if len(
             pixel_data.shape) == 2 else pixel_data.shape[-1]
 
-        if not isinstance(upscale, collections.Iterable) or len(upscale) == 1:
+        if not isinstance(upscale, collections.abc.Iterable) or len(upscale) == 1:
             self.scale = (upscale, upscale)
         else:
             self.scale = upscale
@@ -43,9 +43,9 @@ class PixelMap():
 
         axd.imshow(data, extent=extent[[0, 3, 1, 2]], **kwargs)
 
-    def __getitem__(self, indices: Union[slice, collections.Iterable[slice]]):
+    def __getitem__(self, indices: Union[slice, collections.abc.Iterable[slice]]):
 
-        if not isinstance(indices, collections.Iterable):
+        if not isinstance(indices, collections.abc.Iterable):
             index_x = indices
             index_y = slice(0, None, None)
 

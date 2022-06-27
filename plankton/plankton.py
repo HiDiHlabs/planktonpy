@@ -322,7 +322,7 @@ class SpatialIndexer():
 
     def __getitem__(self, indices):
 
-        if not isinstance(indices, collections.Iterable):
+        if not isinstance(indices, collections.abc.Iterable):
             indices = (indices, )
         if len(indices) == 1:
             ylims = (0, None)
