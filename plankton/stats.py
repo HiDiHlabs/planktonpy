@@ -38,7 +38,7 @@ def _get_kernels(max_radius, linear_steps):
         kernel_2[kernel_2 > 1] = 1
         kernel_2[kernel_2 == 1] = kernel_1[kernel_2 == 1]
 
-        kernels.append(kernel_2/kernel_2.sum())
+        kernels.append(kernel_2)
 
     kernels = np.array(kernels)
 
@@ -54,7 +54,7 @@ def get_histograms(sdata, category=None,resolution=5):
     histograms=[]
     
     if category is None:
-        for gene in sdata.g:
+        for gene in sdata.genes:
             histograms.append(np.histogram2d(*sdata[sdata.g==gene].coordinates.T, bins=n_bins, range=([mins[0], maxs[0]], [mins[1], maxs[1]]))[0])
         
     else:
@@ -63,8 +63,10 @@ def get_histograms(sdata, category=None,resolution=5):
 
     return histograms
 
+import pdb;
+
 def co_occurrence(sdata, resolution=5, max_radius=400, linear_steps=5, category=None):
-    
+
     hists = get_histograms(sdata, category=category)  
 
     if max_radius is None:
@@ -74,32 +76,71 @@ def co_occurrence(sdata, resolution=5, max_radius=400, linear_steps=5, category=
     if (linear_steps is None) or (linear_steps>=max_radius):
         linear_steps=min(max_radius,20)
 
-
     kernels,radii = _get_kernels(max_radius,linear_steps)
-  
+
     co_occurrences = np.zeros((len(hists),)*2+(len(kernels),))
 
     shape = [hists[0].shape[a]+kernels[0].shape[a]-1 for a in [0,1]]
     fshape = [sp_fft.next_fast_len(shape[a], True) for a in [0,1]]
-    
+
     kernels_fft = (sp_fft.rfftn(kernels, fshape,axes=[1,2]))
-        
-        
+
+    width_kernel=kernels[0].shape[0]
+
     for i in range(len(hists)):
-        
+        print(i)
         h1_fft = sp_fft.rfftn(hists[i], fshape,axes=[0,1])
         h1_fftprod =  (h1_fft*kernels_fft)
         h1_conv = sp_fft.irfftn(h1_fftprod,fshape,axes=[1,2])
-        h1_conv = signal._signaltools._centered(h1_conv, (len(kernels),)+hists[0].shape).copy()
-        
-        h1_product=h1_conv*hists[i]
+        h1_conv_ =  h1_conv[:,width_kernel//2:width_kernel//2+hists[0].shape[0],
+                        width_kernel//2:width_kernel//2+hists[0].shape[1]] #signal._signaltools._centered(h1_conv,[len(kernels)]+fshape).copy()
+
+        h1_product=h1_conv_*hists[i]/np.sum(kernels,axis=(1,2))[:,None,None]
         co_occurrences[i,i]=h1_product.sum(axis=(1,2))
-        
+
         for j in range(i+1,len(hists)):
-            h2_product=h1_conv*hists[j]
+            h2_product=h1_conv_*hists[j]/np.sum(kernels,axis=(1,2))[:,None,None]
             co_occurrences[i,j] = h2_product.sum(axis=(1,2))
             co_occurrences[j,i]= co_occurrences[i,j]
 
-    return(co_occurrences,radii*resolution,kernels)
+    return radii, co_occurrences
 
+def ripleys_k(sdata, resolution=5, max_radius=400, linear_steps=5, category=None):
 
+    hists = get_histograms(sdata, category=category)  
+
+    if max_radius is None:
+        max_radius=np.ceil(np.min(hists[0].shape)/4).astype(int)
+    else:
+        max_radius = np.ceil(max_radius/resolution).astype(int)
+    if (linear_steps is None) or (linear_steps>=max_radius):
+        linear_steps=min(max_radius,20)
+
+    kernels,radii = _get_kernels(max_radius,linear_steps)
+
+    co_occurrences = np.zeros((len(hists),)*2+(len(kernels),))
+
+    shape = [hists[0].shape[a]+kernels[0].shape[a]-1 for a in [0,1]]
+    fshape = [sp_fft.next_fast_len(shape[a], True) for a in [0,1]]
+
+    kernels_fft = (sp_fft.rfftn(kernels, fshape,axes=[1,2]))
+
+    width_kernel=kernels[0].shape[0]
+
+    for i in range(len(hists)):
+        print(i)
+        h1_fft = sp_fft.rfftn(hists[i], fshape,axes=[0,1])
+        h1_fftprod =  (h1_fft*kernels_fft)
+        h1_conv = sp_fft.irfftn(h1_fftprod,fshape,axes=[1,2])
+        h1_conv_ =  h1_conv[:,width_kernel//2:width_kernel//2+hists[0].shape[0],
+                        width_kernel//2:width_kernel//2+hists[0].shape[1]] #signal._signaltools._centered(h1_conv,[len(kernels)]+fshape).copy()
+
+        h1_product=h1_conv_*hists[i]/np.sum(kernels,axis=(1,2))[:,None,None]
+        co_occurrences[i,i]=h1_product.sum(axis=(1,2))
+
+        for j in range(i+1,len(hists)):
+            h2_product=h1_conv_*hists[j]/np.sum(kernels,axis=(1,2))[:,None,None]
+            co_occurrences[i,j] = h2_product.sum(axis=(1,2))
+            co_occurrences[j,i]= co_occurrences[i,j]
+
+    return radii, co_occurrences
