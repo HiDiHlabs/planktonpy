@@ -57,4 +57,5 @@ html_logo = "imgs/plankton.svg"
 html_theme_options = {
     'logo_only': True,
     'display_version': False,
+    'style_nav_header_background': 'white',
 }
