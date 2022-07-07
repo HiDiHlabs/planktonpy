@@ -1,0 +1,2 @@
+The PixelMap object
+===================

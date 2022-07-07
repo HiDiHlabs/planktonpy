@@ -1,0 +1,2 @@
+The SpatialStatistics object
+============================

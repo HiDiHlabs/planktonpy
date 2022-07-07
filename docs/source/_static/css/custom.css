@@ -1,0 +1,15 @@
+@import './theme.css';
+
+
+.logo {
+    width:90% !important;;
+  }
+
+/* #pop-plankton{
+   
+  position: fixed;
+  bottom: 0;
+  right: 0;
+    width: 70px; 
+    height:70px
+} */

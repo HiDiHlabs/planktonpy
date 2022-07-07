@@ -12,14 +12,17 @@ import scanpy as sc
 import collections
 from scipy import sparse
 import pickle
+
+import matplotlib
 from matplotlib.cm import get_cmap
 from matplotlib.patches import ConnectionPatch
 import matplotlib.patheffects as PathEffects
 from matplotlib import pyplot as plt
-from typing import Union
-from cgitb import text
-from enum import unique
-from hashlib import new
+
+# from typing import Union
+# from cgitb import text
+# from enum import unique
+# from hashlib import new
 # from msilib import add_data
 # from turtle import color
 
@@ -30,6 +33,7 @@ warnings.simplefilter(action='ignore', category=UserWarning)
 # from sklearn.manifold import TSNE
 
 plt.style.use('dark_background')
+# matplotlib.rcParams['figure.figsize'] = (15, 15)
 
 
 class ScanpyDataFrame():
@@ -335,6 +339,11 @@ class SpatialIndexer():
 
 
 class ObscDF(pd.DataFrame):
+    """ObscDF _summary_
+
+    :param pd: _description_
+    :type pd: _type_
+    """
 
     def __init__(self, sdata, assign_colors=True):
         super(ObscDF, self).__init__(index=sdata.stats.index)
@@ -563,6 +572,7 @@ class SpatialData(pd.DataFrame):
                 c=None,
                 color=None,
                 color_prop='genes',
+                marker='.',
                 legend=None,
                 axd=None,
                 plot_bg=True,
@@ -578,7 +588,7 @@ class SpatialData(pd.DataFrame):
 
         if self.background and plot_bg:
             handle_imshow = self.background.imshow(
-                cmap='Greys', alpha=0.5, axd=axd)
+                cmap='Greys', axd=axd)
 
         if c is None:
             if color is None:
@@ -591,12 +601,13 @@ class SpatialData(pd.DataFrame):
                     ['c_'+color_prop][0] for l in labels]
 
             handles = [plt.scatter([], [], color=c) for c in clrs]
-            handle_legend = plt.legend(handles, labels)
+            handle_legend = plt.legend(handles, labels, loc='right')
 
         # axd.set_title(gene)
         handle_scatter = axd.scatter(self.x,
                                      self.y,
                                      c=c,
+                                     marker=marker,
                                      color=color,
                                      cmap=cmap,
                                      **kwargs)

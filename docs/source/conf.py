@@ -12,7 +12,8 @@
 
 import os
 import sys
-sys.path.insert(0, os.path.abspath('../../plankton/'))
+sys.path.insert(0, os.path.abspath('../../plankton'))
+# sys.path.insert(0, os.path.abspath('../../plankton/graph.py'))
 
 
 # -- Project information -----------------------------------------------------
@@ -30,7 +31,7 @@ release = '0.1.0'
 # Add any Sphinx extension module names here, as strings. They can be
 # extensions coming with Sphinx (named 'sphinx.ext.*') or your custom
 # ones.
-extensions = [
+extensions = ['sphinx.ext.autodoc'
 ]
 
 # Add any paths that contain templates here, relative to this directory.
@@ -57,5 +58,13 @@ html_logo = "imgs/plankton.svg"
 html_theme_options = {
     'logo_only': True,
     'display_version': False,
-    'style_nav_header_background': 'white',
+    'style_nav_header_background': 'lightgray',
 }
+
+html_style = "css/custom.css"
+
+
+html_js_files = [
+    'pop-plankton.js',
+]
+
