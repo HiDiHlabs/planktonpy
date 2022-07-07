@@ -57,7 +57,7 @@ html_static_path = ['_static']
 html_logo = "imgs/plankton.svg"
 html_theme_options = {
     'logo_only': True,
-    'display_version': False,
+    'display_version': True,
     'style_nav_header_background': 'lightgray',
 }
 
