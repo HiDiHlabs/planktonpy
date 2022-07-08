@@ -131,3 +131,5 @@ dmypy.json
 
 # planktonpy files
 *.pl
+
+test/codeluppi-et-al
