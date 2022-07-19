@@ -486,9 +486,9 @@ class SpatialGraph():
         )
 
         def store_selection(event):
-            self.sdata[text_field.value] = pd.Series(
-                np.arange(len(self.sdata))).isin(f_umap.data[0].selectedpoints)
-            []
+            self.sdata[text_field.value] = (pd.Series(
+                np.arange(len(self.sdata))).isin(f_umap.data[0].selectedpoints)).values
+
         store_button.on_click(store_selection)
 
         reset_button = widgets.Button(
