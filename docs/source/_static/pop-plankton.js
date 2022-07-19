@@ -25,15 +25,19 @@ var img = document.createElement("img");
 
 current_path = document.location;
 if (document.location.origin == "null") { //local file
+
+    console.loc('local');
     if ((document.location.pathname.split('/')).includes("rst")) {
         img.src = "../_images/plankton-only.svg";
     }
     else {
-        img.src = "../_images/plankton-only.svg";
+        img.src = "./_images/plankton-only.svg";
     }
 }
 else {
+    console.loc('remote');
     img.src=document.location.href.split('/').slice(0,5).join("/")+"_images/plankton-only.svg";
+    console.log(img.src)
     // if ((document.location.pathname.split('/')).includes("rst")) {
     //     img.src = "../../_images/plankton-only.svg";
     // }
