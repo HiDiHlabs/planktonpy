@@ -22,7 +22,12 @@ var hpos = 'right:-' + (50 + Math.floor(Math.random() * 10)) + 'px;';
 var vpos = 'bottom:' + (Math.floor(Math.random() * 80) + 10) + '%;';
 
 var img = document.createElement("img");
-img.src = document.location.pathname.split('/').slice(0,8).join("/")+"/_images/plankton-only.svg";//"../_images/plankton-only.svg";
+// var img_path = $.get("_images/plankton-only.svg)
+img.src = "_images/plankton-only.svg";//"../_images/plankton-only.svg";
+if (document.location.pathname.split('/')[8]=='rst'){
+    img.src = "../_images/plankton-only.svg";
+}
+
 img.id = "pop-plankton";
 img.onmouseenter = escape_mouse;
 img.width = 100;
