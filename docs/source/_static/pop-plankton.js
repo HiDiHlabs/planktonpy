@@ -27,6 +27,9 @@ img.src = "_images/plankton-only.svg";//"../_images/plankton-only.svg";
 if (document.location.pathname.split('/')[8]=='rst'){
     img.src = "../_images/plankton-only.svg";
 }
+else{
+    img.src = "./_images/plankton-only.svg";
+}
 
 img.id = "pop-plankton";
 img.onmouseenter = escape_mouse;
