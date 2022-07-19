@@ -33,7 +33,7 @@ if (document.location.origin == "null") { //local file
     }
 }
 else {
-    img.src=document.location.pathname.split('/').slice(0,3).join("/")+"_images/plankton-only.svg";
+    img.src=document.location.href.split('/').slice(0,5).join("/")+"_images/plankton-only.svg";
     // if ((document.location.pathname.split('/')).includes("rst")) {
     //     img.src = "../../_images/plankton-only.svg";
     // }
