@@ -24,15 +24,25 @@ var vpos = 'bottom:' + (Math.floor(Math.random() * 80) + 10) + '%;';
 var img = document.createElement("img");
 
 current_path = document.location;
-
-if ((document.location.pathname.split('/')).includes("rst")){
-    img.src = "../../_images/plankton-only.svg";
+if (document.location.origin == "null") { //local file
+    if ((document.location.pathname.split('/')).includes("rst")) {
+        img.src = "../_images/plankton-only.svg";
+    }
+    else {
+        img.src = "../_images/plankton-only.svg";
+    }
 }
-else if ((document.location.pathname.split('/')).slice(-1)==""){
-    img.src = "./_images/plankton-only.svg";
-}
-else{
-    img.src = "../_images/plankton-only.svg";
+else {
+    img.src=document.location.pathname.split('/').slice(0,3).join("/")+"_images/plankton-only.svg";
+    // if ((document.location.pathname.split('/')).includes("rst")) {
+    //     img.src = "../../_images/plankton-only.svg";
+    // }
+    // else if ((document.location.pathname.split('/')).slice(-1) == "") {
+    //     img.src = "./_images/plankton-only.svg";
+    // }
+    // else {
+    //     img.src = "../_images/plankton-only.svg";
+    // }
 }
 
 img.id = "pop-plankton";
