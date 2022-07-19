@@ -1,0 +1,31 @@
+<style>
+    .custom-grid-container {
+        display: grid;
+        grid-template-columns: 50% 50%;
+        padding: 10px;
+        padding-bottom: 40px;
+    }
+
+    .custom-grid-item {
+        border: 1px solid rgba(0, 0, 0, 0.0);
+    }
+</style>
+<div class='custom-grid-container'>
+    <div class="custom-grid-item" style="padding-bottom:0px">
+        <div class="highlight-python3 notranslate">
+            <div class="highlight">
+                <pre><span></span><span class="c1">#extract umap's y-coordinates:</span><br><span class="n">radiatum_umap_y = sdata_radiatum.graph.umap[:,1]</span><br><br><span class="c1">#plot umap with color grading:</span><br><span class="p">sdata_radiatum.graph.plot_umap(c=radiatum_umap_y)</span><span class="p">]</span><span class="o">.</span><span class="n">scatter</span><span class="p">()</span></pre>
+            </div>
+        </div>
+    </div>
+    <div class="custom-grid-item" style="padding-bottom:0px">
+        <div class="highlight-python3 notranslate">
+            <div class="highlight">
+                <pre><span><br><br><br></span><span class="c1">#plot umap-y in tissue coordinates</span><br><span class="n">sdata</span><span class="p">[</span><span class="n">sdata_radiatum.scatter(c=radiatum_umap_y)</span><span class="p"></span></pre>
+            </div>
+        </div>
+    </div>
+    <div class="custom-grid-item" style="padding-bottom:50px"> <img src="../_images/index-downsample.png"> </div>
+    <div class="custom-grid-item" style="padding-bottom:50px"> <img src="../_images/index-neurod6.png"> </div>
+
+</div> <br> <br>

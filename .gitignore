@@ -133,3 +133,4 @@ dmypy.json
 *.pl
 
 test/codeluppi-et-al
+test/nonn-et-al

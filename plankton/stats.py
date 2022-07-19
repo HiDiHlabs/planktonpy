@@ -65,7 +65,22 @@ def get_histograms(sdata, category=None,resolution=5):
 
 import pdb;
 
-def co_occurrence(sdata, resolution=5, max_radius=400, linear_steps=5, category=None):
+def co_occurrence(sdata, resolution=5.0, max_radius=400, linear_steps=5, category=None):
+    """co_occurrence _summary_
+
+    :param sdata: SpatialData - all spots contained in sdata will be analysed. 
+    :type sdata: SpatialData
+    :param resolution: Smallest resolution of the co-occurence model in um, defaults to 5.
+    :type resolution: float, optional
+    :param max_radius: Largest radius of the co-occurrence model in um, defaults to 400.
+    :type max_radius: float, optional
+    :param linear_steps: Number of linear steps to model local heterogeniety. Afterwards, distance bins get wider to save computational resources, defaults to 5
+    :type linear_steps: int, optional
+    :param category: Category to model the co-occurrence of. Must be a column in 'sdata' with dtype 'category'. When given 'None', the algorithm defaults to gene labels.
+    :type category: str, optional
+    :return: _description_
+    :rtype: _type_
+    """
 
     hists = get_histograms(sdata, category=category)  
 

@@ -86,8 +86,9 @@ class PixelMap():
         )
 
     def get_value(self, x, y, padding_value=-1):
-        x= np.array(x).flatten()
-        y= np.array(y).flatten()
+        x_= np.array(y).flatten()
+        y= np.array(x).flatten()
+        x=x_
         x = np.round((x-self.extent[0])/self.extent[1]*self.data.shape[0]).astype(int)
         y = np.round((y-self.extent[2])/self.extent[3]*self.data.shape[1]).astype(int)
 

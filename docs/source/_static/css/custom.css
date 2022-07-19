@@ -5,11 +5,7 @@
     width:90% !important;;
   }
 
-/* #pop-plankton{
+#pop-plankton{
    
-  position: fixed;
-  bottom: 0;
-  right: 0;
-    width: 70px; 
-    height:70px
-} */
+  transition:right 0.5s linear;
+}

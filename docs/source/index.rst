@@ -34,8 +34,10 @@ Plankton is a python package created to make data handling and analysis of point
 
    rst/installation
    rst/tutorial-1-data-handling
-   rst/tutorial-2-exploratory-analysis
-   rst/tutorial-3-statistical-modelling
+   rst/tutorial-2-pixelmap-integration
+   rst/tutorial-3-scanpy-integration
+   rst/tutorial-4-exploratory-analysis
+   rst/tutorial-5-statistical-modelling
 
 .. toctree::
    :maxdepth: 2
@@ -46,6 +48,13 @@ Plankton is a python package created to make data handling and analysis of point
    rst/stats
    rst/graphs-embeddings
    rst/scanpy-anndata
+
+
+.. toctree::
+   :maxdepth: 3
+   :caption: Modules:
+
+   modules
 
 
 

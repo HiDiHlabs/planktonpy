@@ -36,6 +36,14 @@ plankton.stats module
    :undoc-members:
    :show-inheritance:
 
+plankton.utils module
+---------------------
+
+.. automodule:: plankton.utils
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 Module contents
 ---------------
 

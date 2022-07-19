@@ -1,13 +1,17 @@
 
 from __future__ import annotations
-from graph import SpatialGraph
-from pixelmaps import PixelMap, PixelMask
+from tokenize import group
+
+from matplotlib import cm
+# from sympy import N
+from plankton.graph import SpatialGraph
+from plankton.pixelmaps import PixelMap, PixelMask
 import numpy as np
 import pandas as pd
 import random
 import scipy
 import anndata
-from stats import co_occurrence
+from plankton.stats import co_occurrence
 import scanpy as sc
 import collections
 from scipy import sparse
@@ -33,12 +37,22 @@ warnings.simplefilter(action='ignore', category=UserWarning)
 # from sklearn.manifold import TSNE
 
 plt.style.use('dark_background')
-# matplotlib.rcParams['figure.figsize'] = (15, 15)
+matplotlib.rcParams['figure.figsize'] = (15, 15)
 
 
 class ScanpyDataFrame():
+    """A plankton.py wrapper for scanpy-derived annotated data frames that provides an interface with many of the planktonpy functionalities.
+
+    :param sdata: SpatialData the spatial data object that this ScanpyDataFrame 
+    :type sdata: SpatialData
+    :param scanpy_ds: the scanpy AnnData object containing the data set
+    :type scanpy_ds: :class: anndata.AnnData
+    """
 
     def __init__(self, sdata, scanpy_ds):
+        """__init__ initialization method.
+
+        """
         self.sdata = sdata
         self.adata = scanpy_ds
         self.stats = ScStatistics(self)
@@ -49,8 +63,30 @@ class ScanpyDataFrame():
     def shape(self):
         return self.adata.shape
 
-    def generate_signatures(self, celltype_obs_marker='celltype'):
+    @property
+    def obs(self):
+        return self.adata.obs
+    
+    @property
+    def var(self):
+        return self.adata.var
 
+    @property
+    def obsm(self):
+        return self.adata.obsm
+
+    @property
+    def X(self):
+        return self.adata.X
+
+    def generate_signatures(self, celltype_obs_marker='celltype'):
+        """generate_signatures Generates a signature matrix of gene->celltype correlations.
+
+        :param celltype_obs_marker: column given in the 'obs' data field denoting the cell type, defaults to 'celltype'
+        :type celltype_obs_marker: str, optional
+        :return: signature matrix
+        :rtype: pandas.DataFrame
+        """
         self.celltype_labels = np.unique(self.adata.obs[celltype_obs_marker])
 
         self.signature_matrix = np.zeros((
@@ -74,6 +110,8 @@ class ScanpyDataFrame():
         return self.signature_matrix
 
     def synchronize(self):
+        """synchronizes the ScanpyDataFrame with its SpatialData reference objects. Unused genes are removed, statistics updated and sorted.
+        """
 
         joined_genes = (self.stats.genes.intersection(
             self.sdata.genes)).sort_values()
@@ -90,92 +128,6 @@ class ScanpyDataFrame():
         self.sdata.stats = PointStatistics(self.sdata)
 
         self.sdata.graph = SpatialGraph(self.sdata)
-
-    def determine_gains(self):
-
-        sc_genes = self.adata.var.index
-        counts_sc = np.array(self.adata.X.sum(
-            0) / self.adata.X.sum()).flatten()
-
-        counts_spatial = np.array(
-            [self.sdata.stats.get_count(g) for g in sc_genes])
-
-        counts_spatial = counts_spatial / counts_spatial.sum()
-        count_ratios = counts_sc / counts_spatial
-        return count_ratios
-
-    def plot_gains(self):
-
-        sc_genes = self.adata.var.index
-
-        count_ratios = self.determine_gains()
-        idcs = np.argsort(count_ratios)
-
-        ax = plt.subplot(111)
-
-        span = np.linspace(0, 1, len(idcs))
-        clrs = np.stack([
-            span,
-            span * 0,
-            span[::-1],
-        ]).T
-
-        ax.barh(range(len(count_ratios)), np.log(
-            count_ratios[idcs]), color=clrs)
-
-        ax.text(0,
-                len(idcs) + 3,
-                'lost in spatial ->',
-                ha='center',
-                fontsize=12,
-                color='red')
-        ax.text(0, -3, '<- lost in SC', ha='center', fontsize=12, color='lime')
-
-        for i, gene in enumerate(sc_genes[idcs]):
-            if count_ratios[idcs[i]] < 1:
-                ha = 'left'
-                xpos = 0.05
-            else:
-                ha = 'right'
-                xpos = -0.05
-            ax.text(0, i, gene, ha=ha)
-
-        ax.set_yticks([], [])
-
-    def compare_counts(self):
-
-        sc_genes = (self.adata.var.index)
-        sc_counts = (np.array(self.adata.X.sum(0)).flatten())
-        sc_count_idcs = np.argsort(sc_counts)
-        count_ratios = np.log(self.determine_gains())
-        count_ratios -= count_ratios.min()
-        count_ratios /= count_ratios.max()
-
-        ax1 = plt.subplot(311)
-        ax1.set_title('compared molecule counts:')
-        ax1.bar(np.arange(len(sc_counts)),
-                sc_counts[sc_count_idcs], color='grey')
-        ax1.set_ylabel('log(count) scRNAseq')
-        ax1.set_xticks(np.arange(len(sc_genes)),
-                       sc_genes[sc_count_idcs],
-                       rotation=90)
-        ax1.set_yscale('log')
-
-        ax2 = plt.subplot(312)
-        for i, gene in enumerate(sc_genes[sc_count_idcs]):
-            plt.plot(
-                [i, self.sdata.stats.get_count_rank(gene)],
-                [1, 0],
-            )
-        plt.axis('off')
-        ax2.set_ylabel(' ')
-
-        ax3 = plt.subplot(313)
-        self.sdata.plot_bars(ax3, color='grey')
-        ax3.invert_yaxis()
-        ax3.xaxis.tick_top()
-        ax3.xaxis.set_label_position('top')
-        ax3.set_ylabel('log(count) spatial')
 
     def score_affinity(self, labels_1, labels_2=None, scanpy_obs_label='celltype'):
 
@@ -194,8 +146,75 @@ class ScanpyDataFrame():
 
         return np.log((counts_1+0.1)/(counts_2+0.1))
 
+    def _repr_html_(self):
+
+        magma = get_cmap('Greys')
+
+        html = """  <style> 
+                    .column-header{font-weight:bold;writing-mode:vertical-rl;text-orientation:mixed;}
+                    .row-header{font-weight:bold;}
+                    .x-value{border:collapse}
+                    </style> <table>"""
+
+
+        html+="<tr><td></td>"
+        for i,h in enumerate(self.obs.index.values[:10]):
+            html+=f'<td><div class="column-header">{h}</div></td>'
+
+        html+='<td>...</td>'        
+
+        for i,h in enumerate(self.obs.index.values[-10:]):
+            html+=f'<td><div class="column-header">{h}</div></td>'
+
+        for i,k in enumerate(self.obs.keys()):  
+            html+="<tr>"
+            html+=f"<td>{k}</td>"
+            for j,v in enumerate(self.obs[k].values[:10]):
+                html+=f"<td><div style='width:40px;overflow-wrap: break-word; '>{v}</div></td>"
+            html+="<td>...</td>"
+
+            for j,v in enumerate(self.obs[k].values[-10:]):
+                html+=f"<td><div style='width:40px;overflow-wrap: break-word; '>{v}</div></td>"
+            html+="</tr>"          
+
+
+        html+="</tr>"
+
+        X = self.X
+        X_norm=X-X.min()
+        X_norm/=X_norm.max()
+        X_norm = X_norm.astype(float)
+        X_norm = (X_norm)
+
+        def return_cell(x):
+            color='rgba'+''.join(str(magma(float(x)**0.8,bytes=True)).split(' '))
+            return f"""<td bgcolor="{color}"><div class='x-value' style='width:100%;height:100%;color:white;font-weight:bold;'>{x:.2f}</div></td>"""
+
+        for i,v in enumerate(self.var.index.values[:10]):
+            html+=f"<tr><td><div class='row-header'>{v}</div>"
+            html+=''.join(list(map(return_cell,list(X_norm[:10,i]   ))))
+            if X_norm.shape[0]>20:
+                html+= """<td bgcolor="white"><div class='x-value' style='width:100%;height:100%;'> ...</div></td>"""
+            # html+=f"<tr><td><div class='row-header'>{v}</div>"
+            html+=''.join(list(map(return_cell,list(X_norm[-10:,i]   ))))
+            html+="</tr>"
+        html+= "<tr>"+ """<td bgcolor="white"><div class='x-value' style='width:100%;height:100%;'> ...</div></td>"""*21+"</tr>"
+
+        for i in range(-10,-1):
+            html+=f"<tr><td><div class='row-header'>{self.var.index.values[i]}</div>"
+            html+=''.join(list(map(return_cell,list(X_norm[:10,i]   ))))
+            if X_norm.shape[0]>20:
+                html+= """<td bgcolor="white"><div class='x-value' style='width:100%;height:100%;'> ...</div></td>"""
+            html+=''.join(list(map(return_cell,list(X_norm[-10:,i]   ))))
+            html+="</tr>"
+            
+        return html+"</table>"
+
 
 class GeneStatistics(pd.DataFrame):
+    """GeneStatistics Base class for the different stats data frames containing gene count data.
+
+    """
     def __init__(self, *args, **kwargs):
         super(GeneStatistics, self).__init__(*args, **kwargs)
 
@@ -208,18 +227,48 @@ class GeneStatistics(pd.DataFrame):
         return self.index
 
     def get_count(self, gene):
+        """get_count returns the count for a given gene.
+
+        :param gene: gene name
+        :type gene: str
+        :return: count value
+        :rtype: int
+        """
         if gene in self.genes.values:
             return int(self.counts[self.genes == gene])
 
     def get_id(self, gene_name):
+        """get_id gets the id value for a certain gene
+
+        :param gene_name: gene name
+        :type gene_name: str
+        :return: id value
+        :rtype: int
+        """
         return int(self.gene_ids[self.genes == gene_name])
 
     def get_count_rank(self, gene):
         if gene in self.genes.values:
             return int(self.count_ranks[self.genes == gene])
 
+    def syncronized(self, stats):
+        """syncronized returns a synchronized sdata count list for further statistical processing.
+        NEEDS UPDATING!
+
+        :param stats: external stats object to compare against
+        :type stats: :class: plankton.GeneStatistics
+        :return: concatenated count data frame
+        :rtype: :class: pandas.DataFrame
+        """
+        return pd.concat([self,stats], axis=1).fillna(0)
+
 
 class PointStatistics(GeneStatistics):
+    """PointStatistics _summary_
+
+    :param sdata: :class: SpatialData
+    :type GeneStatistics: _type_
+    """
     def __init__(self, sdata):
         genes, indicers, inverse, counts = np.unique(
             sdata['g'],
@@ -245,16 +294,34 @@ class PointStatistics(GeneStatistics):
 
         sdata.graph = SpatialGraph(self)
 
-    def co_occurrence(self, category=None, resolution=5, max_radius=None, linear_steps=20,):
+    def co_occurrence(self, resolution=5, max_radius=None, linear_steps=20, category=None,):
+        """co_occurrence Generate a co-occurrence matrix for this data set's source data.
+
+        :param resolution: Smallest resolution of the co-occurence model in um, defaults to 5.
+        :type resolution: float, optional
+        :param max_radius: Largest radius of the co-occurrence model in um, defaults to 400.
+        :type max_radius: float, optional
+        :param linear_steps: Number of linear steps to model local heterogeniety. Afterwards, distance bins get wider to save computational resources, defaults to 5
+        :type linear_steps: int, optional
+        :param category: Category to model the co-occurrence of. Must be a column in 'sdata' with dtype 'category'. When given 'None', the algorithm defaults to gene labels.
+        :rtype: str
+        :return: co-occurrence matrix 
+        :rtype: pandas.core.frame.DataFrame
+        """
         return co_occurrence(self.sdata, resolution=resolution, max_radius=max_radius, linear_steps=linear_steps, category=category)
 
 
 class ScStatistics(GeneStatistics):
+    """ScStatistics Statistics object for ScanpyDataFrame
 
-    def __init__(self, scanpy_df):
+    :param sdata: Source data frame 
+    :type sdata: plankton.ScanpyDataFrame
+    """
 
-        counts = np.array(scanpy_df.adata.X.sum(0)).squeeze()
-        genes = scanpy_df.adata.var.index
+    def __init__(self, sdata):
+
+        counts = np.array(sdata.adata.X.sum(0)).squeeze()
+        genes = sdata.adata.var.index
 
         count_idcs = np.argsort(counts)
         count_ranks = np.argsort(count_idcs)
@@ -270,12 +337,22 @@ class ScStatistics(GeneStatistics):
 
 
 class SpatialIndexer():
+    """SpatialIndexer implements spatial view of a source plankton.SpatialData frame. It can be used for simple cropping and to extract spatial size information.
 
-    def __init__(self, df):
-        self.sdata = df
+    :param sdata: source data
+    :type sdata: plankton.SpatialData
+    """
+
+    def __init__(self, sdata):
+        self.sdata = sdata
 
     @property
     def shape(self):
+        """shape returns the shape of the data (instead of the dataframe shape). When available, the function reports the size of a (cropped) dataset background map. Otherwise, the extreme values in the x- and y- directions are returned.
+
+        :return: Spatial extent/shape of the data.
+        :rtype: tuple(int,int)
+        """
         if self.sdata.background is None:
             return np.ceil(self.sdata.x.max() - self.sdata.x.min()).astype(
                 int), np.ceil(self.sdata.y.max() - self.sdata.y.min()).astype(int)
@@ -297,10 +374,19 @@ class SpatialIndexer():
             *xlims, self.sdata.x) & self.create_cropping_mask(*ylims, self.sdata.y)
 
     def crop(self, xlims, ylims):
+        """crop crops the source data accordng to its spatial extent:
+
+        :param xlims: limits in the x-direction
+        :type xlims: (float,float)
+        :param ylims: limits in the y-direction
+        :type ylims: (float,float)
+        :return: New, cropped data set.
+        :rtype: plankton.SpatialData
+        """
 
         mask = self.join_cropping_mask(xlims, ylims)
 
-        pixel_maps = []
+        pixel_maps = {}
 
         if xlims[0] is None:
             start_x = 0
@@ -311,8 +397,8 @@ class SpatialIndexer():
         else:
             start_y = ylims[0]
 
-        for pm in self.sdata.pixel_maps:
-            pixel_maps.append(pm[xlims[0]:xlims[1], ylims[0]:ylims[1]])
+        for key,pm in self.sdata.pixel_maps.items():
+            pixel_maps[key] = (pm[xlims[0]:xlims[1], ylims[0]:ylims[1]])
 
         if self.sdata.scanpy is not None:
             adata = self.sdata.scanpy.adata
@@ -325,6 +411,13 @@ class SpatialIndexer():
                            adata, self.sdata.synchronize)
 
     def __getitem__(self, indices):
+        """__getitem__ cropping interface for the source data set.
+
+        :param indices: cropping indices.
+        :type indices:  slice, iterable
+        :return: cropped source data
+        :rtype: plankton.SpatialData
+        """
 
         if not isinstance(indices, collections.abc.Iterable):
             indices = (indices, )
@@ -339,13 +432,16 @@ class SpatialIndexer():
 
 
 class ObscDF(pd.DataFrame):
-    """ObscDF _summary_
-
-    :param pd: _description_
-    :type pd: _type_
+    """ObscDF A dataframe encoding gene-centric observations.
+    
+    :param sdata: Source data
+    :type sdata: plankton.SpatialData
+    :param assign_colors: initialize a column with color-values for all genes, defaults to True
+    :type assign_colors: bool, optional    
     """
 
     def __init__(self, sdata, assign_colors=True):
+
         super(ObscDF, self).__init__(index=sdata.stats.index)
         self['genes'] = self.index
         if assign_colors:
@@ -353,10 +449,16 @@ class ObscDF(pd.DataFrame):
         self.sdata = sdata
 
     def assign_colors(self, label='genes', cmap=None, shuffle=False):
+        """assign_colors generates colors for a given label, which are stored in a column 'c_'+label
 
-        # if label is None:
-        #     uniques = self.index
-        # else:
+        :param label: column label to generate colors for, defaults to 'genes'
+        :type label: str, optional
+        :param cmap: colormap to pick colors from, defaults to None/'nipy_spectral'
+        :type cmap: _type_, optional
+        :param shuffle: Shuffle the colors randomly before assignment, defaults to False
+        :type shuffle: bool, optional
+        """
+
         uniques = self[label].unique()
 
         if cmap is None:
@@ -372,18 +474,14 @@ class ObscDF(pd.DataFrame):
 
         clrs = {u: clrs[i] for i, u in enumerate(uniques)}
         self['c_'+label] = self[label].apply(lambda x: clrs[x])
-        # print(len(uniques),len(clrs),self.shape)
-        # if label is None:
-        #     self['c_genes']=clrs
-        # else:
-        # clr_list=[(0,0,0,0,)]*len(self)
-        # for i,u in enumerate(uniques):
-        # print([clrs[i]]*sum(self[label]==u))
 
-        # self.loc[self[label]==u,'c_'+label]=[[clrs[i]]]*sum(self[label]==u)
-        # self[]
 
     def project(self, label):
+        """project Projects a column onto the gene composition of the source data set.
+
+        :param label: Label of column to project.
+        :type label: str
+        """
         return(self.loc[self.sdata.g][label])
 
     def copy(self):
@@ -391,12 +489,29 @@ class ObscDF(pd.DataFrame):
 
 
 class SpatialData(pd.DataFrame):
+    """SpatialData A data handling interface for Spot-Based spatial data.
+
+    :param genes: A list of gene indicators
+    :type genes: list(str)
+    :param x_coordinates: a list of x-coordinates in micrometers.
+    :type x_coordinates: list(float)
+    :param y_coordinates: a list of y-coordinates in micrometers
+    :type y_coordinates: list(float)
+    :param pixel_maps: A dictionary of pixelmaps, can be used to define background images during initialization. defaults to {}
+    :type pixel_maps: dict(str,plankton.pixelmaps.PixelMap), optional
+    :param scanpy: An optional input for single-cell derived expression data. defaults to None
+    :type scanpy: plankton.ScanpyDataFrame, optional
+    :param synchronize: Whether the different data modalities should be cropped and synchronized at all times. defaults to True
+    :type synchronize: bool, optional
+    :param obsc: A data frame for gene-centric information, defaults to None
+    :type obsc: plankton.ObscDF, optional
+    """
 
     def __init__(self,
                  genes,
                  x_coordinates,
                  y_coordinates,
-                 pixel_maps=[],
+                 pixel_maps={},
                  scanpy=None,
                  synchronize=True,
                  obsc=None):
@@ -410,8 +525,6 @@ class SpatialData(pd.DataFrame):
 
         self['g'] = self['g'].astype('category')
 
-        # Initiate pixel maps:
-        self.pixel_maps = []
         self.stats = PointStatistics(self)
 
         if obsc is None:
@@ -421,11 +534,18 @@ class SpatialData(pd.DataFrame):
 
         self.graph = SpatialGraph(self)
 
-        for pm in pixel_maps:
+        # Initiate pixel maps:
+        self.pixel_maps = {}
+        self.bg_key = None
+
+        for key, pm in pixel_maps.items():
+            if self.bg_key is None: self.bg_key=key
+
             if not type(pm) == PixelMap:
-                self.pixel_maps.append(PixelMap(pm))
+                self.pixel_maps[key]=(PixelMap(pm))
             else:
-                self.pixel_maps.append(pm)
+                self.pixel_maps[key]=(pm)
+
 
         self.synchronize = synchronize
 
@@ -472,7 +592,7 @@ class SpatialData(pd.DataFrame):
     @property
     def background(self):
         if len(self.pixel_maps):
-            return self.pixel_maps[0]
+            return self.pixel_maps[self.bg_key]
 
     @property
     def adata(self):
@@ -543,6 +663,9 @@ class SpatialData(pd.DataFrame):
             new_frame.obsc.drop(self.genes.symmetric_difference(
                 new_frame.genes), inplace=True)
 
+            for c in self.columns[4:]:
+                new_frame[c]=new_data[c]
+
             if self.graph._umap is not None:
                 new_frame.graph._umap = self.graph._umap[self.index.isin(
                     new_frame.index)]
@@ -557,6 +680,17 @@ class SpatialData(pd.DataFrame):
                     mRNA_threshold_spatial=1,
                     verbose=False,
                     anndata=None):
+        """sync_scanpy Synchronizes the SpatialData set with its provided single-cell expression frame. Unpaired genes are removed and statistics re-calculated.
+
+        :param mRNA_threshold_sc: Count below which a gene in the single-cell data set is removed, defaults to 1
+        :type mRNA_threshold_sc: int, optional
+        :param mRNA_threshold_spatial: Count below which a gene in the spatial data set is removed, defaults to 1
+        :type mRNA_threshold_spatial: int, optional
+        :param verbose: Displat warnings (legacy), defaults to False
+        :type verbose: bool, optional
+        :param anndata: _description_, defaults to None
+        :type anndata: Provide a ScanpyDataFrame if the field 'self.scanpy' is empty, optional
+        """
         if anndata is None and self.scanpy is None:
             print('Please provide some scanpy data...')
 
@@ -566,6 +700,13 @@ class SpatialData(pd.DataFrame):
             self.scanpy.synchronize()
 
     def get_id(self, gene_name):
+        """get_id Gets the dataframe-id to a certain gene
+
+        :param gene_name: Gene name
+        :type gene_name: str
+        :return: Gene's id number that's shared across data sets/data modalities
+        :rtype: int
+        """
         return int(self.stats.gene_ids[self.genes == gene_name])
 
     def scatter(self,
@@ -579,9 +720,34 @@ class SpatialData(pd.DataFrame):
                 cmap='jet',
                 scalebar=True,
                 **kwargs):
+        """scatter Leightweight implementation of a scatter plot, using maplotlib as a backend.
+
+        :param c: Defines an individual color for each data point, either through a list of float scale values (color is sampled for a colormap) or a list of matplotlib-interpretable colors. defaults to None
+        :type c: list(float),list(rgb), optional
+        :param color: Marker color, defaults to None
+        :type color: str, optional
+        :param color_prop: column name in self.obsc, used as a color source, defaults to 'genes'
+        :type color_prop: str, optional
+        :param marker: Marker shape, defaults to '.'
+        :type marker: str, optional
+        :param legend: Whether to add a legend artist, defaults to None
+        :type legend: bool, optional
+        :param axd: Provide an axis object that the artists are added to. If none is provided, the current active axis is used. Defaults to None
+        :type axd: matplotlib.pyplot.Asix, optional
+        :param plot_bg: Whether to plot the background image, defaults to True
+        :type plot_bg: bool, optional
+        :param cmap: Define the colormap that colors are sampled from if a 'c' argument is provided, defaults to 'jet'
+        :type cmap: str, optional
+        :param scalebar: Whether to print a scalebar in micrometers, defaults to True
+        :type scalebar: bool, optional
+        :return: handles for the scatters,background and legend.
+        :rtype: tuple
+        """
 
         if axd is None:
             axd = plt.gca()
+
+        axd.set_aspect('equal', adjustable='box')
 
         handle_imshow = None
         handle_legend = None
@@ -589,6 +755,8 @@ class SpatialData(pd.DataFrame):
         if self.background and plot_bg:
             handle_imshow = self.background.imshow(
                 cmap='Greys', axd=axd)
+        else:
+            axd.invert_yaxis()
 
         if c is None:
             if color is None:
@@ -618,6 +786,19 @@ class SpatialData(pd.DataFrame):
         return handle_scatter, handle_imshow, handle_legend
 
     def add_scalebar(self, length=None, unit=r'$\mu$m', axd=None, color='w'):
+        """add_scalebar: Adds a scalebar to a plot.
+
+        :param length: Length of the scalebar, defaults to None
+        :type length: float, optional
+        :param unit: Unit that's displayed on the scalebar, defaults to r'$\mu'
+        :type unit: str, optional
+        :param axd: Axis to draw on, if none is proveded, the current active axis is used. Defaults to None
+        :type axd:  matplotlib.pyplot.Axis, optional
+        :param color:, Font/bar color. defaults to 'w'
+        :type color: str, optional
+        :return: handler for scalebar and text.
+        :rtype: tuple
+        """
 
         if axd is None:
             axd = plt.gca()
@@ -658,7 +839,13 @@ class SpatialData(pd.DataFrame):
         return scbar, sctxt
 
     def plot_bars(self, axis=None, **kwargs):
+        """plot_bars: Plots a sorted bar  graph representation of the gene counts in the sample.
+
+        :param axis: Axis to draw on, if none is proveded, the current active axis is used. Defaults to None
+        :type axis: matplotlib.pyplot.Axis, optional
+        """
         if axis is None:
+
             axis = plt.subplot(111)
         axis.bar(np.arange(len(self.stats.counts)), self.counts_sorted,
                  **kwargs)
@@ -672,6 +859,8 @@ class SpatialData(pd.DataFrame):
         axis.set_ylabel('molecule count')
 
     def plot_overview(self):
+        """plot_overview: Plots a lightweight overview of the spatial data set. A sorted bar representation of molecule counts is shown, alongside a few representative scatter plots of individual genes in the sample.
+        """
 
         colors = ('royalblue', 'goldenrod', 'red', 'lime')
 
@@ -721,22 +910,49 @@ class SpatialData(pd.DataFrame):
 
         plt.suptitle('Selected Expression Densities:', fontsize=18)
 
-    def squidpy(self):
-        # obs={"cluster":self.gene_id.astype('category')}
-        obsm = {"spatial": np.array(self.coordinates)}
-        # var= self.genes
-        # self.obs = self.index
-        # X = self.X #scipy.sparse.csc_matrix((np.ones(len(self.g),),(np.arange(len(self.g)),np.array(self.gene_ids).flatten())),
-        # shape=(len(self.g),self.genes.shape[0],))
+    def squidpy(self, groupby=None):
+        """squidpy: Generates an anndata.AnnData based squidpy-compatible object from the spatial data, including pixel maps and obervation matrices.
 
-        # sparse_representation = scipy.sparse.scr()
-        # var = self.var #pd.DataFrame(index=self.genes)
-        uns = self.uns.update({'Image': self.background})
-        obs = pd.DataFrame({'gene': self.g})
-        obs['gene'] = obs['gene'].astype('category')
-        return anndata.AnnData(X=self.X, obs=obs, var=self.var, obsm=obsm)
+        :param groupby: Name of a dataset column (of type 'category') that denotes membership to certain spatial entities (such as cells) by which to agglomerate the data. I none is provided, every data point is grouped individually. Defaults to None
+        :type groupby: str, optional
+        :return: squidpy-compatible spatial data set. 
+        :rtype: anndata.AnnData
+        """
+        # obs={"cluster":self.gene_id.astype('category')}
+
+        if groupby is None:
+            obsm = {"spatial": np.array(self.coordinates)}
+
+            uns = self.uns.update({'Image': self.background})
+            obs = pd.DataFrame({'gene': self.g})
+            obs['gene'] = obs['gene'].astype('category')
+            return anndata.AnnData(X=self.X, obs=obs, var=self.var, obsm=obsm)
+
+        else:
+
+
+            uns = self.uns.update({'Image': self.background})
+            obs = pd.DataFrame({groupby: self[groupby].unique()})
+            obsm = {"spatial": np.zeros((len(obs),2))}
+            var=self.var
+
+            X=np.zeros((len(obs),len(var)))
+
+            for i,o in enumerate(obs[groupby].values):
+                subset = self[self[groupby]==o]
+                obsm['spatial'][i]=subset.coordinates.mean(0)
+                locs = [self.genes.get_loc(i) for i in subset.counts.index]
+                X[i,locs] = subset.counts.values
+                
+            return anndata.AnnData(X=X, obs=obs, var=var, obsm=obsm)
+
 
     def save(self, path):
+        """save: Save a deep copy of the spatial data, including graphs and pixelmaps.
+
+        :param path: Save path/filename
+        :type path: str
+        """
         pickle.dump({'sdata': self, 'graph': self.graph,
                     'obsc': self.obsc, 'pixel_maps': self.pixel_maps}, open(path, "wb"))
 
@@ -744,6 +960,13 @@ class SpatialData(pd.DataFrame):
 
 
 def load(path):
+    """load: Loads a spatial data set from a disk file.
+
+    :param path: File path/name
+    :type path: str
+    :return: spatial data set
+    :rtype: plankton.SpatialData
+    """
     data = pickle.load(open(path, "rb"))
     sdata = SpatialData(data['sdata']['g'], data['sdata']
                         ['x'], data['sdata']['y'], pixel_maps=data['pixel_maps'])
@@ -756,87 +979,3 @@ def load(path):
     sdata.obsc = data['obsc']
     sdata.obsc.sdata = sdata
     return sdata
-
-
-def create_colorarray(sdata, values, cmap=None):
-    if cmap is None:
-        return values[sdata.gene_ids]
-
-
-def hbar_compare(stat1, stat2, labels=None, text_display_threshold=0.02, c=None):
-
-    genes_united = sorted(
-        list(set(np.concatenate([stat1.index, stat2.index]))))[::-1]
-    counts_1 = [
-        0]+[stat1.loc[i].counts if i in stat1.index else 0 for i in genes_united]
-    counts_2 = [
-        0]+[stat2.loc[i].counts if i in stat2.index else 0 for i in genes_united]
-    cum1 = np.cumsum(counts_1)/sum(counts_1)
-    cum2 = np.cumsum(counts_2)/sum(counts_2)
-
-    if c is None:
-        c = [None]*len(cum1)
-
-    for i in range(1, len(cum1)):
-
-        bars = plt.bar([0, 1], [cum1[i]-cum1[i-1], cum2[i]-cum2[i-1]],
-                       bottom=[cum1[i-1], cum2[i-1], ], width=0.4, color=c[i-1])
-        clr = bars.get_children()[0].get_facecolor()
-        plt.plot((0.2, 0.8), (cum1[i], cum2[i]),
-                 c=plt.rcParams['axes.facecolor'], alpha=0.7)
-        plt.fill_between(
-            (0.2, 0.8), (cum1[i], cum2[i]), (cum1[i-1], cum2[i-1]), color=clr, alpha=0.2)
-
-        if (counts_1[i]/sum(counts_1) > text_display_threshold) or \
-                (counts_2[i]/sum(counts_2) > text_display_threshold):
-            plt.text(0.5, (cum1[i]+cum1[i-1]+cum2[i]+cum2[i-1])/4,
-                     genes_united[i-1], ha='center',)
-
-    if labels is not None:
-        plt.xticks((0, 1), labels)
-
-
-def sorted_bar_compare(stat1, stat2, kwargs1={}, kwargs2={}):
-    categories_1 = (stat1.index)
-    counts_1 = (np.array(stat1.counts).flatten())
-    counts_1_idcs = np.argsort(counts_1)
-    # count_ratios = np.log(self.determine_gains())
-    # count_ratios -= count_ratios.min()
-    # count_ratios /= count_ratios.max()
-
-    ax1 = plt.subplot(311)
-    ax1.set_title('compared molecule counts:')
-    ax1.bar(np.arange(len(counts_1)),
-            counts_1[counts_1_idcs], color='grey', **kwargs1)
-    # ax1.set_ylabel('log(count) scRNAseq')
-    ax1.set_xticks(np.arange(len(categories_1)),
-                   categories_1[counts_1_idcs],
-                   )
-    ax1.tick_params(axis='x', rotation=90)
-    ax1.set_yscale('log')
-
-    ax2 = plt.subplot(312)
-    for i, gene in enumerate(categories_1[counts_1_idcs]):
-        if gene in stat2.index:
-            plt.plot(
-                [i, stat2.count_ranks[gene]],
-                [1, 0],
-            )
-    plt.axis('off')
-    ax2.set_ylabel(' ')
-
-    ax3 = plt.subplot(313)
-    ax3.bar(np.arange(len(stat2)),
-            stat2.counts[stat2.count_indices], color='grey', **kwargs2)
-
-    ax3.set_xticks(np.arange(len(stat2.index)),
-                   stat2.index[stat2.count_indices],
-                   rotation=90)
-    ax3.set_yscale('log')
-    ax3.invert_yaxis()
-    ax3.xaxis.tick_top()
-    ax3.xaxis.set_label_position('top')
-    # ax3.set_ylabel('log(count) spatial')
-    return(ax1, ax2, ax3)
-
-

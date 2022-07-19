@@ -1,32 +1,36 @@
-// docoument.getElementById('kewl').background='r';
+function escape_mouse(event) {
+    img = document.getElementById('pop-plankton');
+    console.log(document.location);
 
-// var edge = [0,2,3][Math.floor(Math.random() * 3)];
-// var rotation = Math.random() * 0.1 - 0.05 + (edge * 0.25);
+    var hpos = -(50 + Math.floor(Math.random() * 10)) + 'px';
+    var vpos = (Math.floor(Math.random() * 80) + 10) + '%';
+    var rotation = Math.random() * 0.2 - 0.1 + (0.75);
 
-// var edges = ['bottom', 'right', 'top', 'right']
+    console.log(img, '' + vpos);
 
-// var vpos = edges[edge]+':-'+(50+Math.floor(Math.random()*10))+'px;';
-// var hpos = edges[(edge+1)%4]+':'+(Math.floor(Math.random()*70)+5)+'%;';
+    img.style.right = "-200px";
 
-var edge = [0,2,3][Math.floor(Math.random() * 3)];
+    setTimeout(function () {
+        img.style.bottom = '' + vpos;
+        img.style.transform = "rotate(" + rotation * 360 + "deg)";
+        img.style.right = '' + hpos;
+    }, 700);
+}
+
 var rotation = Math.random() * 0.1 - 0.05 + (0.75);
-
-var vpos = 'right:-'+(50+Math.floor(Math.random()*10))+'px;';
-var hpos = 'bottom:'+(Math.floor(Math.random()*80)+10)+'%;';
-
-// console.log(vpos,hpos)
+var hpos = 'right:-' + (50 + Math.floor(Math.random() * 10)) + 'px;';
+var vpos = 'bottom:' + (Math.floor(Math.random() * 80) + 10) + '%;';
 
 var img = document.createElement("img");
-img.src = "../_images/plankton-only.svg";
+img.src = document.location.pathname.split('/').slice(0,8).join("/")+"/_images/plankton-only.svg";//"../_images/plankton-only.svg";
 img.id = "pop-plankton";
+img.onmouseenter = escape_mouse;
 img.width = 100;
 img.height = 100;
-img.style = "transform:rotate(" + rotation * 360 + "deg);position:fixed;z-score:5   ;"+vpos+hpos;//#"+Math.random()*100+"vw;";
-
+img.style = "transform:rotate(" + rotation * 360 + "deg);position:fixed;z-score:5   ;" + vpos + hpos;//#"+Math.random()*100+"vw;";
 
 document.addEventListener("DOMContentLoaded", function (event) {
     console.log(img);
-
     var canvas = document.getElementsByClassName('wy-nav-content-wrap')[0];
     canvas.appendChild(img);
 });

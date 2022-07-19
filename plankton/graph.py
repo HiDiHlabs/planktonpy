@@ -20,7 +20,13 @@ from umap import UMAP
 
 
 class SpatialGraph():
+    """SpatialGraph: Container object for all KNN-graph based operations on spatial data sets.
 
+    :param sdata: The spatial data source 
+    :type sdata: plankton.SpatialData
+    :param n_neighbors: number of nearset neighbors to infer, defaults to 10
+    :type n_neighbors: int, optional
+    """
     def __init__(self, sdata, n_neighbors=10) -> None:
 
         self.sdata = sdata
@@ -33,6 +39,11 @@ class SpatialGraph():
 
     @property
     def neighbors(self):
+        """neighbors: Returns an array of neighbors, where each entry encoding the row position of a point in the data set.
+
+        :return: 2d array of n-neighbors per sample data point
+        :rtype: numpy.Array
+        """
         if self._neighbors is None:
             self._distances, self._neighbors, self._neighbor_types = self.update_knn(
                 self.n_neighbors)
@@ -40,6 +51,11 @@ class SpatialGraph():
 
     @property
     def distances(self):
+        """distances: Returns an array of inter-spot distances, which each entry encoding the distance to a defined neighbor. 
+
+        :return: 2d array of distances to the data points of self.neighbors.
+        :rtype: numpy.Array
+        """
         if self._distances is None:
             self._distances, self._neighbors, self._neighbor_types = self.update_knn(
                 self.n_neighbors)
@@ -47,6 +63,11 @@ class SpatialGraph():
 
     @property
     def neighbor_types(self):
+        """neighbor_types: Returns an array of gene_ids for the spots listed in self.neighbors
+
+        :return: 2d array of gene_ids.
+        :rtype: numpy.Array
+        """
         if self._neighbor_types is None:
             self._distances, self._neighbors, self._neighbor_types = self.update_knn(
                 self.n_neighbors)
@@ -54,15 +75,14 @@ class SpatialGraph():
 
     @property
     def umap(self):
-        if self._umap is None:
-            self.run_umap()
-        return self._umap
+        """umap: Returns the coordinates of the UMAP representation of the source data.
 
-    @property
-    def tsne(self):
-        if self._tsne is None:
-            self.run_tsne()
-        return self._tsne
+        :return: UMAP coordinates
+        :rtype: numpy.Array
+        """
+        if self._umap is None:
+            print("No UMAP calculated at this point. Please call 'run_umap' first.")
+        return self._umap
 
     def __getitem__(self, *args):
         sg = SpatialGraph(self.sdata, self.n_neighbors)
@@ -73,7 +93,14 @@ class SpatialGraph():
         if self._neighbor_types is not None:
             sg._neighbor_types = self._neighbor_types.__getitem__(*args)
 
-    def update_knn(self, n_neighbors, re_run=False):
+    def update_knn(self, n_neighbors, re_run=True):
+        """update_knn: Updates the KNN representation that gives rise to self.neighbors, self.distances and self.neighbor_types. This does not happen automatically after slicing, so it should be performed regularity before any graph-based analysis. Can be memory-intensive.
+
+        :param n_neighbors: Number of neighbors for each neighbor graph.
+        :type n_neighbors: int
+        :param re_run: re-run, or use current representation, defaults to True
+        :type re_run: bool, optional
+        """
 
         if self._neighbors is not None and (n_neighbors <
                                             self._neighbors.shape[1]):
@@ -189,6 +216,15 @@ class SpatialGraph():
             fig.add_artist(con)
 
     def _determine_counts(self, bandwidth=1, kernel=None):
+        """_determine_counts: Determines the count distributions of genes around each molecule, thus effectively generating models of the immediate environment. 
+
+        :param bandwidth: Bandwidth of the default Gaussian kernel, defaults to 1
+        :type bandwidth: int, optional
+        :param kernel: callable kernel function. If none is provided, a Gaussian function is used. Defaults to None
+        :type kernel: callable, optional
+        :return: 2d array of count distributions
+        :rtype: np.Array
+        """
 
         counts = np.zeros((len(self.sdata,), len(self.sdata.genes)))
         if kernel is None:
@@ -199,17 +235,17 @@ class SpatialGraph():
                    ] += kernel(self.distances[:, i])
         return counts
 
-    def run_umap(self, bandwidth=1, kernel=None, metric='euclidean', zero_weight=1, *args, **kwargs):
-        """run_umap _summary_
+    def run_umap(self, bandwidth=1, kernel=None, metric='euclidean', zero_weight=1.0, *args, **kwargs):
+        """run_umap: Creates a UMAP representation of recurring local contexts in the source data.
 
-        :param bandwidth: _description_, defaults to 1
+        :param bandwidth: Bandwidth of the default Gaussian kernel used to build local environment models, defaults to 1
         :type bandwidth: int, optional
-        :param kernel: _description_, defaults to None
-        :type kernel: _type_, optional
-        :param metric: _description_, defaults to 'cosine'
-        :type metric: str, optional
-        :param zero_weight: _description_, defaults to 1
-        :type zero_weight: int, optional
+        :param kernel: Callable function to generate a model of the local spatial context for each spot's KNN graph. If none is provided, the default Gaussian is used. Defaults to None
+        :type kernel: callable, optional
+        :param metric:  Kernel description used as a UMAP parameter, defaults to 'euclidean'
+        :type metric: str, callable, optional
+        :param zero_weight: Regularization parameter that adds information of each spot's gene label to its local context model. High value encourages spots to form clusters with spots of their own gene label, defaults to 1
+        :type zero_weight: float, optional
         """
         # print(kwargs)
         counts = self._determine_counts(bandwidth=bandwidth, kernel=kernel)
@@ -297,28 +333,49 @@ class SpatialGraph():
                 # except:
                 #     print(f'Failed to assign text label to {g}')
     def umap_js(self, color_prop='c_genes'):
+        """umap_js: A javascript-based display and selection function for the spatial source data and generated UMAP embedding. Can be used to understand UMAP agglomerations by displaying their gene compositions and projecting them back onto the original source data coordinates.
+
+        :param color_prop: Property by which to color the spots in the scatter plots of the source data coordinates as well as the UMAP representation. Needs to be a column in sdata.obsc, defaults to 'c_genes'
+        :type color_prop: str, optional
+        :return: plotly HTML/javascript widget that displays in the jupyter notebook.
+        :rtype: plotly.Widget
+        """
 
         n_bars = 20
 
-        f_scatter = go.FigureWidget(px.imshow(np.repeat(self.sdata.pixel_maps[0].data[:, :, None], 3, axis=-1,),
-                                              x=np.linspace(
-                                                  self.sdata.background.extent[0], self.sdata.background.extent[1], self.sdata.background.data.shape[0]),
-                                              y=np.linspace(
-                                                  self.sdata.background.extent[2], self.sdata.background.extent[3], self.sdata.background.data.shape[1])
-                                              ),
-                                    layout=Layout(border='solid 4px', width='100%'))
+        if self.sdata.background is not None:
+            f_scatter = go.FigureWidget(px.imshow(np.repeat(self.sdata.background.data[:, :, None], 3, axis=-1,),
+                                                x=np.linspace(
+                                                    self.sdata.background.extent[0], self.sdata.background.extent[1], self.sdata.background.data.shape[0]),
+                                                y=np.linspace(
+                                                    self.sdata.background.extent[2], self.sdata.background.extent[3], self.sdata.background.data.shape[1])
+                                                ),
+                                        layout=Layout(border='solid 4px', width='100%'))
 
-        trace_scatter = go.Scattergl(x=self.sdata.x,
-                                     y=self.sdata.y,
-                                     mode='markers',
-                                     marker=dict(
-                                         color=self.sdata.obsc.project(color_prop)),
-                                     hoverinfo='none', meta={'name': 'tissue-scatter'},
-                                     unselected={'marker': {
-                                         'color': 'black', 'opacity': 0.2}},
-                                     )
+            trace_scatter = go.Scattergl(x=self.sdata.x,
+                                        y=self.sdata.y,
+                                        mode='markers',
+                                        marker=dict(
+                                            color=self.sdata.obsc.project(color_prop)),
+                                        hoverinfo='none', meta={'name': 'tissue-scatter'},
+                                        unselected={'marker': {
+                                            'color': 'black', 'opacity': 0.2}},
+                                        )
 
-        f_scatter.add_trace(trace_scatter)
+            f_scatter.add_trace(trace_scatter)
+        else:
+            trace_scatter = go.Scattergl(x=self.sdata.x,
+                            y=self.sdata.y,
+                            mode='markers',
+                            marker=dict(
+                                color=self.sdata.obsc.project(color_prop)),
+                            hoverinfo='none', meta={'name': 'tissue-scatter'},
+                            unselected={'marker': {
+                                'color': 'black', 'opacity': 0.2}},
+                            )
+
+            f_scatter = go.FigureWidget(trace_scatter,)
+
 
         f_umap = go.FigureWidget(go.Scattergl(x=self.sdata.graph.umap[:, 0],
                                               y=self.sdata.graph.umap[:, 1],
@@ -369,7 +426,7 @@ class SpatialGraph():
                 f_umap.data[0].selectedpoints = plot.selectedpoints
 
             else:
-                f_scatter.data[1].selectedpoints = plot.selectedpoints
+                f_scatter.data[-1].selectedpoints = plot.selectedpoints
 
             subset = self.sdata[np.array(points.point_inds)]
 
@@ -412,7 +469,7 @@ class SpatialGraph():
             f_bars_binom.data[0].x = xs[-n_bars:]
             f_bars_binom.data[0].y = (ys[-n_bars:])
 
-        f_scatter.data[1].on_selection(update_bars)
+        f_scatter.data[-1].on_selection(update_bars)
         f_umap.data[0].on_selection(update_bars)
 
         text_field = widgets.Text(
@@ -443,141 +500,38 @@ class SpatialGraph():
         return widgets.VBox([widgets.HBox([f_scatter, f_umap], layout=Layout(display='flex', width='100%', height='80%', border='red solid 1px', align_items='stretch', justify_content='space-around', flex_direction='row')),
                             widgets.HBox([widgets.HBox([f_bars, f_bars_ratio_up, f_bars_binom], layout=Layout(display='flex', width='80%')),
                                           widgets.VBox([widgets.HBox([text_field,
-                                                                      store_button
-                                                                      ]), widgets.HBox([reset_button])], layout=Layout(display='flex', width='20%', height='100%', border='red solid 1px', justify_content='space-around', flex_direction='column')
+                                                                      ]), widgets.HBox([store_button,reset_button])], layout=Layout(display='flex', width='20%', height='100%', border='red solid 1px', justify_content='space-around', flex_direction='column')
                                                        )]
                                          )], layout=Layout(width='100%', height='80vh', background='red', border='solid 1px'))
 
-    def umap_interactive(self, color_prop=None, umap_kwargs={'alpha': 0.1, 'marker': 'x', 'text_kwargs': {'fontsize': 10}, 'legend': False},
-                         scatter_kwargs={'marker': 'x', 'alpha': 0.5, }):
+    def map_and_umap(self, color_prop=None, scalebar=True, cmap='jet',
+                         **kwargs):
+        """map_and_umap: Plots a side-by-side representation of the available UMAP- and coordinate data, with styling arguments passed to both plotting functions. 
+
+        :param color_prop: Property to color the individual markers by. Needs to be a column in self.sdata.obsc, defaults to None
+        :type color_prop: _type_, optional
+        :param scalebar: Whether to display a scalebar in the coordinate representation, defaults to True
+        :type scalebar: bool, optional
+        """
 
         if color_prop is None:
             color_prop = 'genes'
         else:
-            umap_kwargs['color_prop'] = color_prop
-            scatter_kwargs['color_prop'] = color_prop
-
-        click_coords = np.array((0.0, 0.0))
+            kwargs['color_prop'] = color_prop
+            # scatter_kwargs['color_prop'] = color_prop
 
         plt.style.use('dark_background')
 
         fig = plt.gcf()
 
-        dist = ((self.sdata.graph.umap)**2).sum(1)**0.5
-        radius = int(dist.max())+1
-
         ax1 = plt.subplot2grid((3, 2), (0, 0), 2, 1)
 
-        sc2, _, _ = self.sdata.scatter(axd=ax1, s=np.zeros(
-            (len(self.sdata),))+10, **(scatter_kwargs | {'animated': False}))
+        sc2, _, _ = self.sdata.scatter(axd=ax1,scalebar=scalebar,  ** kwargs)
 
         ax2 = plt.subplot2grid((3, 2), (0, 1), 2, 1)
-        self.sdata.graph.plot_umap(**umap_kwargs)
+        self.sdata.graph.plot_umap(**kwargs)
 
-        circle = plt.Circle(
-            (0, 0), radius, color=plt.rcParams['axes.edgecolor'], fill=False, linestyle='--', animated=False)
-        ax2.add_artist(circle)
 
-        ax3 = plt.subplot2grid((3, 2), (2, 0), 1, 1)
-
-        bars = ax3.bar(range(10), np.zeros((10,)), animated=False)
-        plt.xticks(range(10), ['-']*10, rotation=90)
-        ax3.set_ylim(0, 1)
-        ax3.set_ylabel('molecule counts')
-
-        # ax4 = plt.subplot2grid((3, 2), (2, 1),1,1)
-        ax4 = plt.axes([0.6, 0.28, 0.2, 0.05])
-        ax5 = plt.axes([0.6, 0.2, 0.2, 0.05])
-        ax6 = plt.axes([0.8, 0.2, 0.1, 0.05])
-        ax7 = plt.axes([0.6, 0.12, 0.2, 0.05])
-
-        text_box_radius = TextBox(
-            ax4, 'radius', initial=1, color='lightgray', hovercolor='darkgray')
-        text_box_radius.text_disp.set_color('k')
-
-        text_box_label = TextBox(
-            ax5, 'label', initial='mask_1', color='lightgray', hovercolor='darkgray')
-        text_box_label.text_disp.set_color('k')
-
-        txt = ax7.text(0.0, 0.5, '', color='r', va='center')
-        ax7.set_axis_off()
-
-        def store_selection(event):
-            # print('kewl',dist)
-            txt.set_text(text_box_label.text)
-
-            if (~(text_box_label.text in self.sdata.columns)) or ('Click again to overwrite.' in txt.text):
-
-                txt.set_text((dist < int(text_box_radius.text)).sum())
-                self.sdata[text_box_label.text] = dist < int(
-                    text_box_radius.text)
-                txt.set_text(
-                    f'Stored {(dist<int(text_box_radius.text)).sum()} points as {text_box_label.text}.')
-
-            elif (text_box_label.text in self.sdata.columns):
-                # txt.set_text('kewlest')
-                txt.set_text(
-                    f'Label {text_box_label.text} already exists. Click again to overwrite.')
-
-            # fig.canvas.draw()
-
-        btn_submit = Button(ax6, 'store selection',
-                            color='rosybrown', hovercolor='lightcoral')
-        btn_submit.on_clicked(store_selection)
-
-        bg = fig.canvas.copy_from_bbox(fig.bbox)
-
-        fig.canvas.draw()
-        plt.show(block=False)
-        plt.pause(0.1)
-
-        ax2.draw_artist(circle)
-        ax2.figure.canvas.draw_idle()
-        # fig.canvas.blit(fig.bbox)
-        # fig.canvas.flush_events()
-
-        def on_click(event):
-            click_coords[0] = event.xdata
-            click_coords[1] = event.ydata
-
-        def update_bars(subset):
-
-            # ax2.set_title('T')
-            subset = self.sdata[subset]
-            heights = subset.stats.counts.sort_values()[-10:]
-            ax3.set_ylim(0, heights.max())
-
-            [b.set_height(heights.iloc[i]) for i, b in enumerate(bars)]
-            ax3.set_xticklabels(heights.index)
-            [b.set_color(subset.obsc['c_'+color_prop][heights.index[i]])
-             for i, b in enumerate(bars)]
-
-        def on_release(event):
-            center = np.array((event.xdata, event.ydata))
-            if all(click_coords == center) and (event.inaxes is ax2):
-                # ax2.set_title(f'{event.xdata},{event.ydata}')
-                circle.set_center(center)
-
-                dist[:] = ((self.sdata.graph.umap-center)**2).sum(1)**0.5
-
-                radius = int(text_box_radius.text)
-                text_box_label.text
-                btn_submit
-                circle.radius = radius
-
-                sc2._sizes[dist < radius] = 20
-                sc2._sizes[dist > radius] = 0
-
-                update_bars(dist < radius)
-
-                fig.canvas.blit(fig.bbox)
-                fig.canvas.flush_events()
-                # fig.canvas.draw()
-
-        update_bars(dist < radius)
-
-        plt.connect('button_press_event', on_click)
-        plt.connect('button_release_event', on_release)
 
     def _untangle_text(self, cogs, untangle_rounds=50, min_distance=0.5):
         knn = NearestNeighbors(n_neighbors=2)

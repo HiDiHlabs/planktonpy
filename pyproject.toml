@@ -1,0 +1,23 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "plankton"
+version = "0.0.1"
+authors = [
+  { name="Sebastian Tiesmeyer", email="sebastian.tiesmeyer@bih-charite.de" },
+]
+description = "A point process analysis package"
+readme = "README.rst"
+license = { file="LICENSE" }
+requires-python = ">=3.7"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+
+[project.urls]
+"Homepage" = "https://github.com/HiDiHlabs/planktonpy"
+"Bug Tracker" = "https://github.com/HiDiHlabs/planktonpy"
