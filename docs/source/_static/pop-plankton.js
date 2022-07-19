@@ -23,12 +23,13 @@ var vpos = 'bottom:' + (Math.floor(Math.random() * 80) + 10) + '%;';
 
 var img = document.createElement("img");
 
-//"../_images/plankton-only.svg";
+current_path = document.location;
+
 if ((document.location.pathname.split('/')).includes("rst")){
     img.src = "../../_images/plankton-only.svg";
 }
 else if ((document.location.pathname.split('/')).slice(-1)==""){
-    img.src = "_images/plankton-only.svg";
+    img.src = "./_images/plankton-only.svg";
 }
 else{
     img.src = "../_images/plankton-only.svg";
