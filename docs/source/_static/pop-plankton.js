@@ -37,7 +37,7 @@ if (document.location.origin == "null") { //local file
 }
 else {
     console.log('remote');
-    img.src=document.location.href.split('/').slice(0,5).join("/")+"_images/plankton-only.svg";
+    img.src=document.location.href.split('/').slice(0,5).join("/")+"/_images/plankton-only.svg";
     console.log(img.src)
     // if ((document.location.pathname.split('/')).includes("rst")) {
     //     img.src = "../../_images/plankton-only.svg";
