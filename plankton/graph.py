@@ -13,7 +13,7 @@ from ipywidgets import widgets, interactive, HBox, VBox, Output, Layout
 
 import pandas as pd
 from scipy.stats import binom
-from sklearn.decomposition import PCA
+from sklearn.decomposition import PCA, FastICA
 
 from sklearn.neighbors import NearestNeighbors
 
@@ -236,7 +236,7 @@ class SpatialGraph():
                    ] += kernel(self.distances[:, i])
         return counts
 
-    def run_umap(self, bandwidth=1, kernel=None, metric='euclidean', zero_weight=1.0, cutoff = 30, *args, **kwargs):
+    def run_umap(self, bandwidth=1, kernel=None, metric='euclidean', zero_weight=1.0, cutoff = None, *args, **kwargs):
         """run_umap: Creates a UMAP representation of recurring local contexts in the source data.
 
         :param bandwidth: Bandwidth of the default Gaussian kernel used to build local environment models, defaults to 1
@@ -254,14 +254,28 @@ class SpatialGraph():
         counts[np.arange(len(self.sdata)),
                self.sdata.gene_ids] += zero_weight-1
 
-        pca=PCA()
-        facs = pca.fit_transform(counts)
+        if cutoff is not None:
 
-        facs_ = facs[:,:cutoff]
-        facs_[:,-1]=facs[:,cutoff:].sum(1)
+            # print(f'PCA redution to {cutoff} dimensions.')
+            # pca=PCA()
+            # facs = pca.fit_transform(counts)
+
+            # counts = np.zeros((counts.shape[0],cutoff+10))
+
+            # counts[:,:cutoff] = facs[:,:cutoff]
+
+            print(f'Reducing dimensions with FastICA')
+            ica = FastICA(n_components=cutoff)
+            counts = ica.fit_transform(counts)
+
+            # counts[:,cutoff:] = facs
+            # del facs,ica
+            print('Calculating UMAP embedding.')
+            # counts[:,-1]=facs[:,cutoff:].sum(1)
+            
 
         umap = UMAP(metric=metric, *args, **kwargs)
-        self._umap = umap.fit_transform(facs_)
+        self._umap = umap.fit_transform(counts)
 
     def plot_umap(self, color_prop='genes', text_prop=None,
                   text_color_prop=None, c=None, color=None, color_dict=None, text_distance=1,
@@ -350,7 +364,7 @@ class SpatialGraph():
 
         n_bars = 20
 
-        if self.sdata.background is not None:
+        if False:
             f_scatter = go.FigureWidget(px.imshow(np.repeat(self.sdata.background.data[:, :, None], 3, axis=-1,),
                                                 x=np.linspace(
                                                     self.sdata.background.extent[0], self.sdata.background.extent[1], self.sdata.background.data.shape[0]),
