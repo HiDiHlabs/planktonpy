@@ -23,18 +23,11 @@ from matplotlib.patches import ConnectionPatch
 import matplotlib.patheffects as PathEffects
 from matplotlib import pyplot as plt
 
-# from typing import Union
-# from cgitb import text
-# from enum import unique
-# from hashlib import new
-# from msilib import add_data
-# from turtle import color
 
 import warnings
 warnings.simplefilter(action='ignore', category=UserWarning)
 
 
-# from sklearn.manifold import TSNE
 
 plt.style.use('dark_background')
 matplotlib.rcParams['figure.figsize'] = (15, 15)

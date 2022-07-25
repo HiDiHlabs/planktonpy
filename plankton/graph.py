@@ -13,6 +13,7 @@ from ipywidgets import widgets, interactive, HBox, VBox, Output, Layout
 
 import pandas as pd
 from scipy.stats import binom
+from sklearn.decomposition import PCA
 
 from sklearn.neighbors import NearestNeighbors
 
@@ -235,7 +236,7 @@ class SpatialGraph():
                    ] += kernel(self.distances[:, i])
         return counts
 
-    def run_umap(self, bandwidth=1, kernel=None, metric='euclidean', zero_weight=1.0, *args, **kwargs):
+    def run_umap(self, bandwidth=1, kernel=None, metric='euclidean', zero_weight=1.0, cutoff = 30, *args, **kwargs):
         """run_umap: Creates a UMAP representation of recurring local contexts in the source data.
 
         :param bandwidth: Bandwidth of the default Gaussian kernel used to build local environment models, defaults to 1
@@ -252,9 +253,15 @@ class SpatialGraph():
         assert (all(counts.sum(1)) > 0)
         counts[np.arange(len(self.sdata)),
                self.sdata.gene_ids] += zero_weight-1
-        
+
+        pca=PCA()
+        facs = pca.fit_transform(counts)
+
+        facs_ = facs[:,:cutoff]
+        facs_[:,-1]=facs[:,cutoff:].sum(1)
+
         umap = UMAP(metric=metric, *args, **kwargs)
-        self._umap = umap.fit_transform(counts)
+        self._umap = umap.fit_transform(facs_)
 
     def plot_umap(self, color_prop='genes', text_prop=None,
                   text_color_prop=None, c=None, color=None, color_dict=None, text_distance=1,
@@ -526,10 +533,10 @@ class SpatialGraph():
 
         ax1 = plt.subplot2grid((3, 2), (0, 0), 2, 1)
 
-        sc2, _, _ = self.sdata.scatter(axd=ax1,scalebar=scalebar,  ** kwargs)
+        sc2, _, _ = self.sdata.scatter(axd=ax1,scalebar=scalebar,cmap=cmap,  ** kwargs)
 
         ax2 = plt.subplot2grid((3, 2), (0, 1), 2, 1)
-        self.sdata.graph.plot_umap(**kwargs)
+        self.sdata.graph.plot_umap(cmap=cmap,**kwargs)
 
 
 
