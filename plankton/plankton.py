@@ -3,6 +3,7 @@ from __future__ import annotations
 from tokenize import group
 
 from matplotlib import cm
+from yaml import scan
 # from sympy import N
 from plankton.graph import SpatialGraph
 from plankton.pixelmaps import PixelMap, PixelMask
@@ -16,6 +17,7 @@ import scanpy as sc
 import collections
 from scipy import sparse
 import pickle
+from scipy.stats import binom
 
 import matplotlib
 from matplotlib.cm import get_cmap
@@ -23,13 +25,15 @@ from matplotlib.patches import ConnectionPatch
 import matplotlib.patheffects as PathEffects
 from matplotlib import pyplot as plt
 
+import plotly.express as px
+import plotly.graph_objects as go
+from ipywidgets import widgets, interactive, HBox, VBox, Output, Layout
 
 import warnings
 warnings.simplefilter(action='ignore', category=UserWarning)
 
 
-
-plt.style.use('dark_background')
+# plt.style.use('dark_background')
 matplotlib.rcParams['figure.figsize'] = (15, 15)
 
 
@@ -59,7 +63,7 @@ class ScanpyDataFrame():
     @property
     def obs(self):
         return self.adata.obs
-    
+
     @property
     def var(self):
         return self.adata.var
@@ -114,7 +118,8 @@ class ScanpyDataFrame():
         self.sdata.reset_index()
         self.adata = self.adata[:, joined_genes]
         self.stats = ScStatistics(self)
-        self.sdata.drop(index=list(
+
+        pd.DataFrame.drop(self.sdata, index=list(
             self.sdata.index[~self.sdata.g.isin(joined_genes)]),
             inplace=True)
 
@@ -149,58 +154,66 @@ class ScanpyDataFrame():
                     .x-value{border:collapse}
                     </style> <table>"""
 
+        html += "<tr><td></td>"
+        for i, h in enumerate(self.obs.index.values[:10]):
+            html += f'<td><div class="column-header">{h}</div></td>'
 
-        html+="<tr><td></td>"
-        for i,h in enumerate(self.obs.index.values[:10]):
-            html+=f'<td><div class="column-header">{h}</div></td>'
+        html += '<td>...</td>'
 
-        html+='<td>...</td>'        
+        for i, h in enumerate(self.obs.index.values[-10:]):
+            html += f'<td><div class="column-header">{h}</div></td>'
 
-        for i,h in enumerate(self.obs.index.values[-10:]):
-            html+=f'<td><div class="column-header">{h}</div></td>'
+        for i, k in enumerate(self.obs.keys()):
+            html += "<tr>"
+            html += f"<td>{k}</td>"
+            for j, v in enumerate(self.obs[k].values[:10]):
+                html += f"<td><div style='width:40px;overflow-wrap: break-word; '>{v}</div></td>"
+            html += "<td>...</td>"
 
-        for i,k in enumerate(self.obs.keys()):  
-            html+="<tr>"
-            html+=f"<td>{k}</td>"
-            for j,v in enumerate(self.obs[k].values[:10]):
-                html+=f"<td><div style='width:40px;overflow-wrap: break-word; '>{v}</div></td>"
-            html+="<td>...</td>"
+            for j, v in enumerate(self.obs[k].values[-10:]):
+                html += f"<td><div style='width:40px;overflow-wrap: break-word; '>{v}</div></td>"
+            html += "</tr>"
 
-            for j,v in enumerate(self.obs[k].values[-10:]):
-                html+=f"<td><div style='width:40px;overflow-wrap: break-word; '>{v}</div></td>"
-            html+="</tr>"          
-
-
-        html+="</tr>"
+        html += "</tr>"
 
         X = self.X
-        X_norm=X-X.min()
-        X_norm/=X_norm.max()
+        X_norm = X-X.min()
+        X_norm /= X_norm.max()
         X_norm = X_norm.astype(float)
         X_norm = (X_norm)
 
+        if type(X) == np.ndarray:
+            def proc(x):
+                return x
+        else:
+            def proc(x):
+                return x.toarray().flatten()
+
         def return_cell(x):
-            color='rgba'+''.join(str(magma(float(x)**0.8,bytes=True)).split(' '))
+            color = 'rgba' + \
+                ''.join(str(magma(float(x)**0.8, bytes=True)).split(' '))
             return f"""<td bgcolor="{color}"><div class='x-value' style='width:100%;height:100%;color:white;font-weight:bold;'>{x:.2f}</div></td>"""
 
-        for i,v in enumerate(self.var.index.values[:10]):
-            html+=f"<tr><td><div class='row-header'>{v}</div>"
-            html+=''.join(list(map(return_cell,list(X_norm[:10,i]   ))))
-            if X_norm.shape[0]>20:
-                html+= """<td bgcolor="white"><div class='x-value' style='width:100%;height:100%;'> ...</div></td>"""
+        for i, v in enumerate(self.var.index.values[:10]):
+            html += f"<tr><td><div class='row-header'>{v}</div>"
+            html += ''.join(list(map(return_cell, list(proc(X_norm[:10, i])))))
+            if X_norm.shape[0] > 20:
+                html += """<td bgcolor="white"><div class='x-value' style='width:100%;height:100%;'> ...</div></td>"""
             # html+=f"<tr><td><div class='row-header'>{v}</div>"
-            html+=''.join(list(map(return_cell,list(X_norm[-10:,i]   ))))
-            html+="</tr>"
-        html+= "<tr>"+ """<td bgcolor="white"><div class='x-value' style='width:100%;height:100%;'> ...</div></td>"""*21+"</tr>"
+            html += ''.join(list(map(return_cell,
+                            list(proc(X_norm[-10:, i])))))
+            html += "</tr>"
+        html += "<tr>" + """<td bgcolor="white"><div class='x-value' style='width:100%;height:100%;'> ...</div></td>"""*21+"</tr>"
 
-        for i in range(-10,-1):
-            html+=f"<tr><td><div class='row-header'>{self.var.index.values[i]}</div>"
-            html+=''.join(list(map(return_cell,list(X_norm[:10,i]   ))))
-            if X_norm.shape[0]>20:
-                html+= """<td bgcolor="white"><div class='x-value' style='width:100%;height:100%;'> ...</div></td>"""
-            html+=''.join(list(map(return_cell,list(X_norm[-10:,i]   ))))
-            html+="</tr>"
-            
+        for i in range(-10, -1):
+            html += f"<tr><td><div class='row-header'>{self.var.index.values[i]}</div>"
+            html += ''.join(list(map(return_cell, list(proc(X_norm[:10, i])))))
+            if X_norm.shape[0] > 20:
+                html += """<td bgcolor="white"><div class='x-value' style='width:100%;height:100%;'> ...</div></td>"""
+            html += ''.join(list(map(return_cell,
+                            list(proc(X_norm[-10:, i])))))
+            html += "</tr>"
+
         return html+"</table>"
 
 
@@ -208,6 +221,7 @@ class GeneStatistics(pd.DataFrame):
     """GeneStatistics Base class for the different stats data frames containing gene count data.
 
     """
+
     def __init__(self, *args, **kwargs):
         super(GeneStatistics, self).__init__(*args, **kwargs)
 
@@ -253,7 +267,7 @@ class GeneStatistics(pd.DataFrame):
         :return: concatenated count data frame
         :rtype: :class: pandas.DataFrame
         """
-        return pd.concat([self,stats], axis=1).fillna(0)
+        return pd.concat([self, stats], axis=1).fillna(0)
 
 
 class PointStatistics(GeneStatistics):
@@ -262,13 +276,10 @@ class PointStatistics(GeneStatistics):
     :param sdata: :class: SpatialData
     :type GeneStatistics: _type_
     """
+
     def __init__(self, sdata):
-        genes, indicers, inverse, counts = np.unique(
-            sdata['g'],
-            return_index=True,
-            return_inverse=True,
-            return_counts=True,
-        )
+
+        counts = sdata.g.value_counts().sort_index()
 
         count_idcs = np.argsort(counts)
         count_ranks = np.argsort(count_idcs)
@@ -278,11 +289,12 @@ class PointStatistics(GeneStatistics):
                 'counts': counts,
                 'count_ranks': count_ranks,
                 'count_indices': count_idcs,
-                'gene_ids': np.arange(len(genes))
+                'gene_ids': np.arange(len(counts))
             },
-            index=genes)
+            index=counts.index)
 
-        sdata['gene_id'] = inverse
+        sdata['gene_id'] = (pd.Series(np.arange(len(counts)),
+                            index=counts.index)[sdata.g]).values
         self.sdata = sdata
 
         sdata.graph = SpatialGraph(self)
@@ -302,6 +314,17 @@ class PointStatistics(GeneStatistics):
         :rtype: pandas.core.frame.DataFrame
         """
         return co_occurrence(self.sdata, resolution=resolution, max_radius=max_radius, linear_steps=linear_steps, category=category)
+
+    def progressive_sample(self, power=1.2):
+        count_ratios = (self.counts**(1/power)/self.counts)
+
+        sample_mask = np.ones((len(self.sdata,)), dtype=bool)
+
+        for i, c in enumerate(count_ratios):
+            sample_array = np.linspace(0, 1, self.counts[i])
+            np.random.shuffle(sample_array)
+            sample_mask[self.sdata.gene_ids == i] = sample_array < c
+        return sample_mask
 
 
 class ScStatistics(GeneStatistics):
@@ -390,18 +413,14 @@ class SpatialIndexer():
         else:
             start_y = ylims[0]
 
-        for key,pm in self.sdata.pixel_maps.items():
-            pixel_maps[key] = (pm[xlims[0]:xlims[1], ylims[0]:ylims[1]])
+        sdata = self.sdata[mask]
+        sdata['x'] -= start_x
+        sdata['y'] -= start_y
 
-        if self.sdata.scanpy is not None:
-            adata = self.sdata.scanpy.adata
-        else:
-            adata = None
+        for key, pm in sdata.pixel_maps.items():
+            sdata.pixel_maps[key] = (pm[xlims[0]:xlims[1], ylims[0]:ylims[1]])
 
-        return SpatialData(self.sdata.g[mask],
-                           self.sdata.x[mask] - start_x,
-                           self.sdata.y[mask] - start_y, pixel_maps,
-                           adata, self.sdata.synchronize)
+        return sdata
 
     def __getitem__(self, indices):
         """__getitem__ cropping interface for the source data set.
@@ -419,6 +438,8 @@ class SpatialIndexer():
         else:
             ylims = (indices[1].start, indices[1].stop)
 
+        # print(indices)
+
         xlims = (indices[0].start, indices[0].stop)
 
         return self.crop(xlims, ylims)
@@ -426,7 +447,7 @@ class SpatialIndexer():
 
 class ObscDF(pd.DataFrame):
     """ObscDF A dataframe encoding gene-centric observations.
-    
+
     :param sdata: Source data
     :type sdata: plankton.SpatialData
     :param assign_colors: initialize a column with color-values for all genes, defaults to True
@@ -466,8 +487,7 @@ class ObscDF(pd.DataFrame):
             random.shuffle(clrs)
 
         clrs = {u: clrs[i] for i, u in enumerate(uniques)}
-        self['c_'+label] = self[label].apply(lambda x: clrs[x])
-
+        self['c_'+label] = self[label].astype('str').apply(lambda x: (clrs[x]))
 
     def project(self, label):
         """project Projects a column onto the gene composition of the source data set.
@@ -532,19 +552,21 @@ class SpatialData(pd.DataFrame):
         self.bg_key = None
 
         for key, pm in pixel_maps.items():
-            if self.bg_key is None: self.bg_key=key
-
-            if not type(pm) == PixelMap:
-                self.pixel_maps[key]=(PixelMap(pm))
+            if self.bg_key is None:
+                self.bg_key = key
+            if isinstance(pm, np.ndarray):
+                self.pixel_maps[key] = (PixelMap(pm))
             else:
-                self.pixel_maps[key]=(pm)
-
+                self.pixel_maps[key] = (pm)
 
         self.synchronize = synchronize
 
         # Append scanpy data set, synchronize both:
         if scanpy is not None:
-            self.scanpy = ScanpyDataFrame(self, scanpy)
+            if type(scanpy) == ScanpyDataFrame:
+                self.scanpy = self.scanpy = scanpy
+            elif type(scanpy) == anndata.AnnData:
+                self.scanpy = ScanpyDataFrame(self, scanpy)
             if self.synchronize:
                 self.sync_scanpy()
         else:
@@ -553,6 +575,7 @@ class SpatialData(pd.DataFrame):
         # self.obsm = {"spatial":np.array(self.coordinates).T}
         # self.obs = pd.DataFrame({'gene':self.g})
         self.uns = {}
+        self.obsp = {}
 
     @property
     def gene_ids(self):
@@ -603,11 +626,12 @@ class SpatialData(pd.DataFrame):
 
     @property
     def obs(self):
-        return pd.DataFrame({'gene': self.g}).astype(str).astype('category')
+        # pd.DataFrame({'gene': self.g}).astype(str).astype('category')
+        return self
 
     @property
     def obsm(self):
-        return {"spatial": np.array(self.coordinates).T}
+        return {"spatial": self.coordinates}
 
     def __getitem__(self, *arg):
 
@@ -657,7 +681,7 @@ class SpatialData(pd.DataFrame):
                 new_frame.genes), inplace=True)
 
             for c in self.columns[4:]:
-                new_frame[c]=new_data[c]
+                new_frame[c] = new_data[c]
 
             if self.graph._umap is not None:
                 new_frame.graph._umap = self.graph._umap[self.index.isin(
@@ -667,6 +691,11 @@ class SpatialData(pd.DataFrame):
 
         print('Reverting to generic Pandas.')
         return super().__getitem__(*arg)
+
+    def raw(self):
+        return SpatialData(x_coordinates=self.x,
+                           y_coordinates=self.y,
+                           genes=self.g)
 
     def sync_scanpy(self,
                     mRNA_threshold_sc=1,
@@ -701,6 +730,70 @@ class SpatialData(pd.DataFrame):
         :rtype: int
         """
         return int(self.stats.gene_ids[self.genes == gene_name])
+
+    def unite_columns(self, col_names, other='other'):
+        """unite_columns Unites boolean columns in the data frame using their column names
+
+        :param col_names: List of column names to unite
+        :type col_names: iterable
+        :param other: name for empty data field, defaults to 'other'
+        :type other: str, optional
+        """
+
+        united = pd.Categorical(
+            [other]*len(self), categories=[other]+list(col_names))
+        for name in col_names:
+            united[self[name]] = name
+
+        return united
+
+    def clean(self):
+
+        new_frame = SpatialData(self.g.astype(str),
+                                self.x,
+                                self.y,
+                                self.pixel_maps,
+                                scanpy=self.scanpy,
+                                synchronize=False,
+                                obsc=self.obsc.copy())
+
+        new_prop_entries = self.obsc.loc[new_frame.genes]
+        new_frame.obsc[new_prop_entries.columns] = new_prop_entries
+        new_frame.obsc.sdata = new_frame
+        new_frame.obsc.drop(self.genes.symmetric_difference(
+            new_frame.genes), inplace=True)
+
+        for c in self.columns[4:]:
+            new_frame[c] = self[c]
+
+        if self.graph._umap is not None:
+            new_frame.graph._umap = self.graph._umap[self.index.isin(
+                new_frame.index)]
+
+        return (new_frame)
+
+    def drop(self, columns, inplace=False):
+        """drop a column/list of columns
+
+        :param columns: Column name or list of column names
+        :type columns: str, iterable
+        :param inplace: Whether to mutate the data in place or return a new object, defaults to False
+        :type inplace: bool, optional
+        :return: None if inplace=True, cropped SpatialData object otherwise. 
+        :rtype: None, SpatialData
+        """
+
+        if inplace:
+            # self.drop(column,inplace=True,axis=1)
+            pd.DataFrame.drop(self, columns=columns, inplace=True)
+        else:
+            copy = self[:]
+            # copy.drop(column,inplace=True,axis=1)
+            pd.DataFrame.drop(copy, columns=columns, inplace=True)
+            return copy
+
+    def itergenes(self):
+        return enumerate(self.genes)
 
     def scatter(self,
                 c=None,
@@ -756,7 +849,8 @@ class SpatialData(pd.DataFrame):
                 c = self.obsc.project('c_'+color_prop)
 
         if legend:
-            labels = sorted(self.obsc[color_prop].unique())
+            # sorted(self.obsc[color_prop].unique())
+            labels = self.g.unique().sort_values()
             # print(labels)
             clrs = [self.obsc[(self.obsc[color_prop] == l)]
                     ['c_'+color_prop][0] for l in labels]
@@ -830,6 +924,154 @@ class SpatialData(pd.DataFrame):
             [PathEffects.withStroke(linewidth=3, foreground='k')])
 
         return scbar, sctxt
+
+    def scatter_js(self, color_prop='c_genes'):
+        """umap_js: A javascript-based display and selection function for the spatial source data and generated UMAP embedding. Can be used to understand UMAP agglomerations by displaying their gene compositions and projecting them back onto the original source data coordinates.
+
+        :param color_prop: Property by which to color the spots in the scatter plots of the source data coordinates as well as the UMAP representation. Needs to be a column in sdata.obsc, defaults to 'c_genes'
+        :type color_prop: str, optional
+        :return: plotly HTML/javascript widget that displays in the jupyter notebook.
+        :rtype: plotly.Widget
+        """
+
+        n_bars = 20
+
+        trace_scatter = go.Scattergl(x=self.x,
+                                     y=self.y,
+                                     mode='markers',
+                                     marker=dict(
+                                         color=self.obsc.project(color_prop)),
+                                     hoverinfo='none', meta={'name': 'tissue-scatter'},
+                                     unselected={'marker': {
+                                         'color': 'black', 'opacity': 0.2}},
+                                     )
+
+        f_scatter = go.FigureWidget(trace_scatter,)
+
+        colors = self.obsc.loc[self.stats.sort_values(
+            'counts')[-n_bars:].index, color_prop].values
+
+        w_bars = go.Bar(x=self.stats.sort_values('counts')[-n_bars:].index,
+                        y=self.stats.sort_values(
+                            'counts')[-n_bars:]['counts'],
+                        marker={
+                            'color': ['rgb'+str(tuple((np.array(c)*256).astype(int))) for c in colors]},
+                        )
+        f_bars = go.FigureWidget(w_bars,
+                                 layout={'title': 'n (selected):'},
+                                 )
+
+        f_bars.data[0]['showlegend'] = False
+
+        w_bars_ratio_up = go.Bar(x=self.stats.sort_values('counts')[-n_bars:].index,
+                                 y=[0]*n_bars,
+                                 marker={
+                                     'color': ['rgb'+str(tuple((np.array(c)*256).astype(int))) for c in colors]},
+                                 )
+        f_bars_ratio_up = go.FigureWidget(w_bars_ratio_up,
+                                          layout={'title': 'n (selected) / total:'})
+
+        f_bars_ratio_up.data[0]['showlegend'] = False
+
+        w_bars_binom = go.Bar(x=self.stats.sort_values('counts')[-n_bars:].index,
+                              y=[0]*n_bars,
+                              marker={
+                                  'color': ['rgb'+str(tuple((np.array(c)*256).astype(int))) for c in colors]},
+                              )
+        f_bars_binom = go.FigureWidget(w_bars_binom,
+                                       layout={
+                                           'title': 'binomcdf (n (selected),p(total)):'},
+                                       )
+
+        f_bars_binom.data[0]['showlegend'] = False
+
+        out = widgets.Output(layout={'border': '1px solid black'})
+
+        def update_bars(plot, points, selector):
+
+            subset = self[np.array(points.point_inds)]
+
+            colors = subset.obsc.loc[subset.stats.sort_values(
+                'counts')[-n_bars:].index, color_prop].values
+            colors = ['rgb'+str(tuple((np.array(c)*256).astype(int)))
+                      for c in colors]
+            ys = subset.stats.sort_values('counts')[-n_bars:]['counts']
+            xs = subset.stats.sort_values('counts')[-n_bars:].index
+
+            f_bars.data[0].marker.color = colors
+            f_bars.data[0].x = xs
+            f_bars.data[0].y = ys
+
+            vals = (subset.stats.counts) / \
+                (self.stats.loc[subset.stats.index].counts)
+            idcs = np.argsort(vals)
+
+            colors = subset.obsc[color_prop][idcs]
+            colors = ['rgb'+str(tuple((np.array(c)*256).astype(int)))
+                      for c in colors]
+            ys = vals[idcs]
+            xs = subset.stats.index[idcs]
+
+            f_bars_ratio_up.data[0].marker.color = colors[-n_bars:]
+            f_bars_ratio_up.data[0].x = xs[-n_bars:]
+            f_bars_ratio_up.data[0].y = (ys[-n_bars:])
+
+            vals = binom.cdf(subset.stats.counts, self.stats.loc[subset.stats.index].counts, len(
+                subset)/len(self))
+            idcs = np.argsort(vals)
+
+            colors = subset.obsc[color_prop][idcs]
+            colors = ['rgb'+str(tuple((np.array(c)*256).astype(int)))
+                      for c in colors]
+            ys = vals[idcs]
+            xs = subset.stats.index[idcs]
+
+            f_bars_binom.data[0].marker.color = colors[-n_bars:]
+            f_bars_binom.data[0].x = xs[-n_bars:]
+            f_bars_binom.data[0].y = (ys[-n_bars:])
+
+        f_scatter.data[-1].on_selection(update_bars)
+        # f_umap.data[0].on_selection(update_bars)
+
+        text_field = widgets.Text(
+            value='selection1',
+            placeholder='Label for storing',
+            description='Name:',
+            disabled=False
+        )
+
+        store_button = widgets.Button(
+            description='store selection',
+            disabled=False,
+            button_style='',  # 'success', 'info', 'warning', 'danger' or ''
+        )
+
+        def store_selection(event):
+            self[text_field.value] = (pd.Series(
+                np.arange(len(self))).isin(f_scatter.data[0].selectedpoints)).values
+
+        def close_window(event):
+            fig.data = []
+            fig.layout = {}
+
+        store_button.on_click(store_selection)
+
+        reset_button = widgets.Button(
+            description='close window',
+            disabled=False,
+            button_style='',  # 'success', 'info', 'warning', 'danger' or ''
+        )
+
+        reset_button.on_click(close_window)
+
+        fig = widgets.VBox([widgets.HBox([f_scatter], layout=Layout(display='flex', width='100%', height='80%', border='red solid 1px', align_items='stretch', justify_content='space-around', flex_direction='row')),
+                            widgets.HBox([widgets.HBox([f_bars, f_bars_ratio_up, f_bars_binom], layout=Layout(display='flex', width='80%')),
+                                          widgets.VBox([widgets.HBox([text_field,
+                                                                      ]), widgets.HBox([store_button, reset_button])], layout=Layout(display='flex', width='20%', height='100%', border='red solid 1px', justify_content='space-around', flex_direction='column')
+                                                       )]
+                                         )], layout=Layout(width='100%', height='80vh', background='red', border='solid 1px'))
+
+        return fig
 
     def plot_bars(self, axis=None, **kwargs):
         """plot_bars: Plots a sorted bar  graph representation of the gene counts in the sample.
@@ -923,22 +1165,20 @@ class SpatialData(pd.DataFrame):
 
         else:
 
-
             uns = self.uns.update({'Image': self.background})
             obs = pd.DataFrame({groupby: self[groupby].unique()})
-            obsm = {"spatial": np.zeros((len(obs),2))}
-            var=self.var
+            obsm = {"spatial": np.zeros((len(obs), 2))}
+            var = self.var
 
-            X=np.zeros((len(obs),len(var)))
+            X = np.zeros((len(obs), len(var)))
 
-            for i,o in enumerate(obs[groupby].values):
-                subset = self[self[groupby]==o]
-                obsm['spatial'][i]=subset.coordinates.mean(0)
+            for i, o in enumerate(obs[groupby].values):
+                subset = self[self[groupby] == o]
+                obsm['spatial'][i] = subset.coordinates.mean(0)
                 locs = [self.genes.get_loc(i) for i in subset.counts.index]
-                X[i,locs] = subset.counts.values
-                
-            return anndata.AnnData(X=X, obs=obs, var=var, obsm=obsm)
+                X[i, locs] = subset.counts.values
 
+            return anndata.AnnData(X=X, obs=obs, var=var, obsm=obsm)
 
     def save(self, path):
         """save: Save a deep copy of the spatial data, including graphs and pixelmaps.

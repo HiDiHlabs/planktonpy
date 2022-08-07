@@ -1,32 +1,18 @@
+from textwrap import fill
 from threading import local
+
 import numpy as np
+# from numpy.ma.extras import _covhelper
+# from numpy.ma.core import dot 
+
 from requests import patch
 from scipy.ndimage import gaussian_filter, maximum_filter
+from plankton.pixelmaps import PixelMap
+
+
+
 import matplotlib.pyplot as plt
 
-def get_histograms(sdata, mins=None, maxs=None, category=None, resolution=5):
-
-    if mins is None:
-        mins = sdata.coordinates.min(0)
-
-    if maxs is None:
-        maxs = sdata.coordinates.max(0)
-
-    n_bins = np.ceil(np.divide(maxs-mins, resolution)).astype(int)
-
-    histograms = []
-
-    if category is None:
-        for gene in sdata.genes:
-            histograms.append(np.histogram2d(
-                *sdata[sdata.g == gene].coordinates.T, bins=n_bins, range=([mins[0], maxs[0]], [mins[1], maxs[1]]))[0])
-
-    else:
-        for c in sdata[category].cat.categories:
-            histograms.append(np.histogram2d(
-                *sdata[sdata[category] == c].coordinates.T, bins=n_bins, range=([mins[0], maxs[0]], [mins[1], maxs[1]]))[0])
-
-    return histograms
 
 def determine_gains(stats1,stats2):
 
@@ -183,54 +169,158 @@ def sorted_bar_compare(stat1, stat2, kwargs1={}, kwargs2={}):
 #     ax3.xaxis.set_label_position('top')
 #     ax3.set_ylabel('log(count) spatial')
 
-def ssam(sdata, signatures, supervised=None, adata_obs_label='celltype', kernel_bandwidth=2.5, patch_length=500, threshold_exp=0.1, threshold_cor=0.2):
+def fill_celltypemaps(ct_map, fill_blobs=True, min_blob_area=0, filter_params={}, output_mask=None):
+    """
+    Post-filter cell type maps created by `map_celltypes`.
 
-    # if sdata.scanpy is not None and ((supervised is None) or (supervised is False) ):
-    #     signatures = sdata.scanpy.generate_signatures(adata_obs_label)
-    # else:
-    #     signatures=None
-    out_shape = (np.ceil(sdata.x.max()).astype(int),
-                 np.ceil(sdata.y.max()).astype(int))
+    :param min_r: minimum threshold of the correlation.
+    :type min_r: float
+    :param min_norm: minimum threshold of the vector norm.
+        If a string is given instead, then the threshold is automatically determined using
+        sklearn's `threshold filter functions <https://scikit-image.org/docs/dev/api/skimage.filters.html>`_ (The functions start with `threshold_`).
+    :type min_norm: str or float
+    :param fill_blobs: If true, then the algorithm automatically fill holes in each blob.
+    :type fill_blobs: bool
+    :param min_blob_area: The blobs with its area less than this value will be removed.
+    :type min_blob_area: int
+    :param filter_params: Filter parameters used for the sklearn's threshold filter functions.
+        Not used when `min_norm` is float.
+    :type filter_params: dict
+    :param output_mask: If given, the cell type maps will be filtered using the output mask.
+    :type output_mask: np.ndarray(bool)
+    """
 
-    ct_map = np.zeros((out_shape), dtype=int)
-    patch_delimiters = list(range(0, np.ceil(sdata.x.max()).astype(int), int(
-        patch_length-kernel_bandwidth*3)))+[np.ceil(sdata.x.max()).astype(int)]
+    from skimage import measure
+    
+    
+    filtered_ctmaps = np.zeros_like(ct_map) - 1
 
-    localmax_vectors = []
-    for i, p in enumerate(patch_delimiters[:-1]):
-        sdata_patch = sdata.spatial[p:patch_delimiters[i+1]]
-        hists = get_histograms(sdata_patch, resolution=1)
-        hists = np.array([gaussian_filter(h, kernel_bandwidth) for h in hists])
+    for cidx in np.unique(ct_map):
+        mask = ct_map==cidx
+        if min_blob_area > 0 or fill_blobs:
+            blob_labels = measure.label(mask, background=0)
+            for bp in measure.regionprops(blob_labels):
+                if min_blob_area > 0 and bp.filled_area < min_blob_area:
+                    for c in bp.coords:
+                        mask[c[0], c[1],] = 0 
+                        
+                    continue
+                if fill_blobs and bp.area != bp.filled_area:
+                    minx, miny,  maxx, maxy, = bp.bbox
+                    mask[minx:maxx, miny:maxy,] |= bp.filled_image
 
-        norm = np.sum(hists, axis=0)
+        filtered_ctmaps[np.logical_and(mask == 1, np.logical_or(ct_map == -1, ct_map == cidx))] = cidx
 
-        if signatures is None:
-            localmaxs = maximum_filter(norm, size=5)
-            localmaxs = (localmaxs == norm) & (localmaxs != 0)
-            # localmaxs = np.where(localmaxs)
-            localmaxs = [h[localmaxs] for h in hists]
-            localmax_vectors.append(localmaxs)
+    return filtered_ctmaps
 
-        mask = norm > 0.02
 
-        exps = np.zeros((len(sdata.genes),mask.sum()))
-        exps[sdata.stats.loc[sdata_patch.genes].gene_ids.values,:]=hists[:, mask]
+def get_histograms(sdata, mins=None, maxs=None, category=None, resolution=5):
 
-        signatures -= signatures.mean(0)
-        signatures /= signatures.std(0)
+    if mins is None:
+        mins = sdata.coordinates.min(0)
 
-        exps -= exps.mean(0)
-        exps -= exps.std(0)
+    if maxs is None:
+        maxs = sdata.coordinates.max(0)+1
 
-        local_ct_map = mask.astype(int)
-        corrs = np.inner(exps.T, signatures.T)
-        local_ct_map[mask] = corrs.argmax(1)
+    # print(mins,maxs)
 
-        idcs=sdata_patch.index.values
-        x_=int(sdata[idcs].x.min())
-        y_=int(sdata[idcs].y.min())
+    n_bins = np.ceil(np.divide(maxs-mins, resolution)).astype(int)
 
-        ct_map[x_:x_+local_ct_map.shape[0],
-               y_:y_+local_ct_map.shape[1]]=local_ct_map
+    histograms = []
 
-    return ct_map.T,
+    if category is None:
+        for gene in sdata.genes:
+            histograms.append(np.histogram2d(
+                *sdata[sdata.g == gene].coordinates.T, bins=n_bins, range=([mins[0], maxs[0]], [mins[1], maxs[1]]))[0])
+
+    else:
+        for c in sdata[category].cat.categories:
+            histograms.append(np.histogram2d(
+                *sdata[sdata[category] == c].coordinates.T, bins=n_bins, range=([mins[0], maxs[0]], [mins[1], maxs[1]]))[0])
+
+    return histograms,
+
+def crosscorr(x,y):
+    x -= x.mean(1)[:,None]
+    y -= y.mean(1)[:,None]
+
+    c = (np.dot(x, y.T)/x.shape[1] ).squeeze()
+    return c/x.std(1)[:,None]/y.std(1)
+
+
+def ssam(sdata, signatures=None, adata_obs_label='celltype', kernel_bandwidth=2.5, output_um_p_px=5,
+        patch_length=1000, threshold_exp=0.1, threshold_cor=0.1, background_value=-1,
+        fill_blobs=True,min_blob_area=10):
+
+    if (sdata.scanpy is not None) and (signatures is None):
+        signatures = sdata.scanpy.generate_signatures(adata_obs_label)
+
+    kernel_bandwidth_px=kernel_bandwidth/output_um_p_px
+
+    out_shape = (np.ceil(sdata.x.max()/output_um_p_px+kernel_bandwidth_px*3).astype(int),
+                 np.ceil(sdata.y.max()/output_um_p_px+kernel_bandwidth_px*3).astype(int))
+
+    ct_map = np.zeros((out_shape), dtype=int)+background_value
+    vf_norm = np.zeros_like(ct_map)
+
+    range_x = np.floor(sdata.x.min()).astype(int),np.ceil(sdata.x.max()).astype(int)
+    patch_delimiters_x = list(range(range_x[0],range_x[1],patch_length))+[range_x[1]]
+
+    range_y = np.floor(sdata.y.min()).astype(int),np.ceil(sdata.y.max()).astype(int)
+    patch_delimiters_y = list(range(range_y[0],range_y[1],patch_length))+[range_y[1]]
+
+    print(list(patch_delimiters_x),list(patch_delimiters_y))
+
+    for i,x in enumerate(patch_delimiters_x[:-1]):
+        for j,y in enumerate(patch_delimiters_y[:-1]):
+            sdata_patch = sdata.raw().spatial[x:patch_delimiters_x[i+1],
+                                        y:patch_delimiters_y[j+1]]   
+
+            if not len(sdata_patch): break
+            
+            mins = sdata_patch.coordinates.min(0).astype(int)
+            maxs = sdata_patch.coordinates.max(0).astype(int)+kernel_bandwidth*3
+            hists = get_histograms(sdata_patch,mins=mins,maxs=maxs, resolution=output_um_p_px)
+            hists = np.concatenate([gaussian_filter(h, kernel_bandwidth_px) for h in hists])
+
+            print(hists.shape)
+
+            norm = np.sum(hists, axis=0)
+
+            vf_norm[(x+mins[0])//output_um_p_px:(x+mins[0])//output_um_p_px+norm.shape[0],
+                    (y+mins[1])//output_um_p_px:(y+mins[1])//output_um_p_px+norm.shape[1],]=norm
+
+            mask = norm > threshold_exp
+
+            exps = np.zeros((len(sdata.genes),mask.sum()))
+
+            print(exps.shape,signatures.shape)
+            exps[sdata.stats.loc[sdata_patch.genes].gene_ids.values,:]=hists[:, mask]
+
+            # signatures -= signatures.mean(0)
+            # signatures /= signatures.std(0)
+
+            # exps -= exps.mean(0)
+            # exps -= exps.std(0)
+
+            local_ct_map = mask.astype(int)-1
+            # corrs = np.inner(exps.T, signatures)
+
+            corrs = crosscorr(exps.T,signatures)
+            print(corrs.min())
+            corrs_winners = corrs.argmax(1)
+            corrs_winners[corrs.max(1)<threshold_cor]=background_value
+            local_ct_map[mask] = corrs_winners
+
+            # idcs=sdata_patch.index
+
+
+            x_=int(max(0,(x+mins[0])-kernel_bandwidth_px*3))//output_um_p_px
+            y_=int(max(0,(y+mins[1])-kernel_bandwidth_px*3))//output_um_p_px
+            
+            
+            ct_map[x_:x_+local_ct_map.shape[0],
+                   y_:y_+local_ct_map.shape[1]]=local_ct_map
+    
+    ct_map = fill_celltypemaps(ct_map,min_blob_area=min_blob_area, fill_blobs=fill_blobs)
+    return PixelMap(ct_map.T,px_p_um=1/output_um_p_px)
