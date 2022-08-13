@@ -9,19 +9,22 @@ class PixelMap():
 
     def __init__(self,
                  pixel_data: np.ndarray,
-                 upscale: float = 1.0,
+                 px_p_um: float = 1.0,
                  x_shift=0.0,
-                 y_shift=0.0) -> None:
+                 y_shift=0.0,
+                 cmap='Greys') -> None:
 
         self.data = pixel_data
 
         self.n_channels = 1 if len(
             pixel_data.shape) == 2 else pixel_data.shape[-1]
 
-        if not isinstance(upscale, collections.abc.Iterable) or len(upscale) == 1:
-            self.scale = (upscale, upscale)
+        if not isinstance(px_p_um, collections.abc.Iterable) or len(px_p_um) == 1:
+            self.scale = (px_p_um, px_p_um)
         else:
-            self.scale = upscale
+            self.scale = px_p_um
+
+        self.cmap=cmap
 
         self.extent = (x_shift, x_shift+pixel_data.shape[0] / self.scale[0],
                        y_shift, y_shift + pixel_data.shape[1] / self.scale[1])
@@ -30,7 +33,7 @@ class PixelMap():
     def shape(self):
         return self.extent[1] - self.extent[0], self.extent[3] - self.extent[2]
 
-    def imshow(self, axd=None, **kwargs) -> None:
+    def imshow(self, cmap=None, axd=None, **kwargs) -> None:
         extent = np.array(self.extent)
 
         if (len(self.data.shape) > 2) and (self.data.shape[2] > 4):
@@ -41,10 +44,14 @@ class PixelMap():
         if axd is None:
             axd = plt.subplot(111)
 
-        axd.imshow(data, extent=extent[[0, 3, 1, 2]], **kwargs)
+        if cmap is None:
+            cmap = self.cmap
+
+        axd.imshow(data, extent=extent[[0, 3, 1, 2]], cmap=cmap,**kwargs)
 
     def __getitem__(self, indices: Union[slice, collections.abc.Iterable[slice]]):
 
+        # print(self.extent)
         if not isinstance(indices, collections.abc.Iterable):
             index_x = indices
             index_y = slice(0, None, None)
@@ -62,7 +69,7 @@ class PixelMap():
         else:
             start_x = index_x.start
         if (index_x.stop is None):
-            stop_x = self.extent[1]
+            stop_x = self.extent[3]-1
         else:
             stop_x = index_x.stop
 
@@ -71,10 +78,11 @@ class PixelMap():
         else:
             start_y = index_y.start
         if (index_y.stop is None):
-            stop_y = self.extent[3]
+            stop_y = self.extent[1]-1
         else:
             stop_y = index_y.stop
 
+        # print(self.data.shape, int(stop_x * self.scale[1]), int(stop_y * self.scale[0]), self.scale)
         data = self.data[int(start_y * self.scale[1]):int(stop_y *
                                                           self.scale[1]),
                          int(start_x * self.scale[0]):int(stop_x *
@@ -82,7 +90,7 @@ class PixelMap():
 
         return PixelMap(
             data,
-            upscale=self.scale,
+            px_p_um=self.scale,
         )
 
     def get_value(self, x, y, padding_value=-1):
@@ -107,16 +115,16 @@ class KDEProjection(PixelMap):
                  bandwidth: float = 3.0,
                  threshold_vf_norm: float = 1.0,
                  threshold_p_corr: float = 0.5,
-                 upscale: float = 1) -> None:
+                 px_p_um: float = 1) -> None:
 
         self.sdata = sd
         self.bandwidth = bandwidth
         self.threshold_vf_norm = threshold_vf_norm
         self.threshold_p_corr = threshold_p_corr
 
-        self.scale = upscale
+        self.scale = px_p_um
 
-        super().__init__(self.run_kde(), upscale)
+        super().__init__(self.run_kde(), px_p_um)
 
     def run_kde(self) -> None:
 
@@ -157,13 +165,13 @@ class DensityMap(PixelMap):
 class PixelMask(PixelMap):
     def __init__(self,
                  pixel_data: np.ndarray,
-                 upscale: float = 1.0,
+                 px_p_um: float = 1.0,
                  x_shift=0.0,
                  y_shift=0.0) -> None:
 
         super(PixelMask, self).__init__(
             pixel_data=pixel_data,
-            upscale=upscale,
+            px_p_um=px_p_um,
             x_shift=x_shift,
             y_shift=y_shift
         )

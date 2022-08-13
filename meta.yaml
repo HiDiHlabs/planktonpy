@@ -1,0 +1,37 @@
+{% set name = "plankton" %}
+{% set version = "0.0.1" %}
+
+package:
+  name: "{{ name|lower }}"
+  version: "{{ version }}"
+
+source:
+  git_url: "https://github.com/HiDiHlabs/planktonpy"
+  url: "https://pypi.org/project/planktonspace/"
+
+requirements:
+  build:
+    - python
+    - setuptools
+
+  run:
+    - python
+    - numpy
+    - jupyter
+    - matplotlib
+    - numpy
+    - pandas
+    - plotly
+    - scipy
+    - scikit-image
+    - scikit-learn
+    - umap-learn
+    # - anndata
+    # - scanpy
+
+# test:
+#   imports:
+#     -
+
+# about:
+#   home:

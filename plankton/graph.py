@@ -28,6 +28,7 @@ class SpatialGraph():
     :param n_neighbors: number of nearset neighbors to infer, defaults to 10
     :type n_neighbors: int, optional
     """
+
     def __init__(self, sdata, n_neighbors=10) -> None:
 
         self.sdata = sdata
@@ -73,6 +74,14 @@ class SpatialGraph():
             self._distances, self._neighbors, self._neighbor_types = self.update_knn(
                 self.n_neighbors)
         return self._neighbor_types[:, :self.n_neighbors]
+
+    @property
+    def umap_0(self):
+        return self._umap[:, 0]
+
+    @property
+    def umap_1(self):
+        return self._umap[:, 1]
 
     @property
     def umap(self):
@@ -216,7 +225,7 @@ class SpatialGraph():
                                   linestyle='dotted')
             fig.add_artist(con)
 
-    def _determine_counts(self, bandwidth=1, kernel=None):
+    def _determine_counts(self, bandwidth=1, regularization=0, kernel=None):
         """_determine_counts: Determines the count distributions of genes around each molecule, thus effectively generating models of the immediate environment. 
 
         :param bandwidth: Bandwidth of the default Gaussian kernel, defaults to 1
@@ -234,9 +243,14 @@ class SpatialGraph():
         for i in range(0, self.n_neighbors):
             counts[np.arange(len(self.sdata)), self.neighbor_types[:, i]
                    ] += kernel(self.distances[:, i])
+
+        assert (all(counts.sum(1)) > 0)
+        counts[np.arange(len(self.sdata)),
+               self.sdata.gene_ids] += regularization-1
+
         return counts
 
-    def run_umap(self, bandwidth=1, kernel=None, metric='euclidean', zero_weight=1.0, cutoff = None, *args, **kwargs):
+    def run_umap(self, bandwidth=1, kernel=None, metric='euclidean', zero_weight=1.0, cutoff=None, *args, **kwargs):
         """run_umap: Creates a UMAP representation of recurring local contexts in the source data.
 
         :param bandwidth: Bandwidth of the default Gaussian kernel used to build local environment models, defaults to 1
@@ -249,10 +263,8 @@ class SpatialGraph():
         :type zero_weight: float, optional
         """
         # print(kwargs)
-        counts = self._determine_counts(bandwidth=bandwidth, kernel=kernel)
-        assert (all(counts.sum(1)) > 0)
-        counts[np.arange(len(self.sdata)),
-               self.sdata.gene_ids] += zero_weight-1
+        counts = self._determine_counts(
+            bandwidth=bandwidth, kernel=kernel, regularization=zero_weight)
 
         if cutoff is not None:
 
@@ -272,7 +284,6 @@ class SpatialGraph():
             # del facs,ica
             print('Calculating UMAP embedding.')
             # counts[:,-1]=facs[:,cutoff:].sum(1)
-            
 
         umap = UMAP(metric=metric, *args, **kwargs)
         self._umap = umap.fit_transform(counts)
@@ -364,16 +375,7 @@ class SpatialGraph():
 
         n_bars = 20
 
-        if False:
-            f_scatter = go.FigureWidget(px.imshow(np.repeat(self.sdata.background.data[:, :, None], 3, axis=-1,),
-                                                x=np.linspace(
-                                                    self.sdata.background.extent[0], self.sdata.background.extent[1], self.sdata.background.data.shape[0]),
-                                                y=np.linspace(
-                                                    self.sdata.background.extent[2], self.sdata.background.extent[3], self.sdata.background.data.shape[1])
-                                                ),
-                                        layout=Layout(border='solid 4px', width='100%'))
-
-            trace_scatter = go.Scattergl(x=self.sdata.x,
+        trace_scatter = go.Scattergl(x=self.sdata.x,
                                         y=self.sdata.y,
                                         mode='markers',
                                         marker=dict(
@@ -383,20 +385,7 @@ class SpatialGraph():
                                             'color': 'black', 'opacity': 0.2}},
                                         )
 
-            f_scatter.add_trace(trace_scatter)
-        else:
-            trace_scatter = go.Scattergl(x=self.sdata.x,
-                            y=self.sdata.y,
-                            mode='markers',
-                            marker=dict(
-                                color=self.sdata.obsc.project(color_prop)),
-                            hoverinfo='none', meta={'name': 'tissue-scatter'},
-                            unselected={'marker': {
-                                'color': 'black', 'opacity': 0.2}},
-                            )
-
-            f_scatter = go.FigureWidget(trace_scatter,)
-
+        f_scatter = go.FigureWidget(trace_scatter,)
 
         f_umap = go.FigureWidget(go.Scattergl(x=self.sdata.graph.umap[:, 0],
                                               y=self.sdata.graph.umap[:, 1],
@@ -417,7 +406,9 @@ class SpatialGraph():
                         marker={
                             'color': ['rgb'+str(tuple((np.array(c)*256).astype(int))) for c in colors]},
                         )
-        f_bars = go.FigureWidget(w_bars)
+        f_bars = go.FigureWidget(w_bars,
+                                 layout={'title': 'n (selected):'},
+                                 )
 
         f_bars.data[0]['showlegend'] = False
 
@@ -426,7 +417,8 @@ class SpatialGraph():
                                  marker={
                                      'color': ['rgb'+str(tuple((np.array(c)*256).astype(int))) for c in colors]},
                                  )
-        f_bars_ratio_up = go.FigureWidget(w_bars_ratio_up)
+        f_bars_ratio_up = go.FigureWidget(w_bars_ratio_up,
+                                          layout={'title': 'n (selected) / total:'})
 
         f_bars_ratio_up.data[0]['showlegend'] = False
 
@@ -435,7 +427,9 @@ class SpatialGraph():
                               marker={
                                   'color': ['rgb'+str(tuple((np.array(c)*256).astype(int))) for c in colors]},
                               )
-        f_bars_binom = go.FigureWidget(w_bars_binom)
+        f_bars_binom = go.FigureWidget(w_bars_binom,
+                                       layout={
+                                           'title': 'binomcdf (n (selected),p(total)):'},)
 
         f_bars_binom.data[0]['showlegend'] = False
 
@@ -521,12 +515,12 @@ class SpatialGraph():
         return widgets.VBox([widgets.HBox([f_scatter, f_umap], layout=Layout(display='flex', width='100%', height='80%', border='red solid 1px', align_items='stretch', justify_content='space-around', flex_direction='row')),
                             widgets.HBox([widgets.HBox([f_bars, f_bars_ratio_up, f_bars_binom], layout=Layout(display='flex', width='80%')),
                                           widgets.VBox([widgets.HBox([text_field,
-                                                                      ]), widgets.HBox([store_button,reset_button])], layout=Layout(display='flex', width='20%', height='100%', border='red solid 1px', justify_content='space-around', flex_direction='column')
+                                                                      ]), widgets.HBox([store_button, reset_button])], layout=Layout(display='flex', width='20%', height='100%', border='red solid 1px', justify_content='space-around', flex_direction='column')
                                                        )]
                                          )], layout=Layout(width='100%', height='80vh', background='red', border='solid 1px'))
 
     def map_and_umap(self, color_prop=None, scalebar=True, cmap='jet',
-                         **kwargs):
+                     **kwargs):
         """map_and_umap: Plots a side-by-side representation of the available UMAP- and coordinate data, with styling arguments passed to both plotting functions. 
 
         :param color_prop: Property to color the individual markers by. Needs to be a column in self.sdata.obsc, defaults to None
@@ -547,12 +541,11 @@ class SpatialGraph():
 
         ax1 = plt.subplot2grid((3, 2), (0, 0), 2, 1)
 
-        sc2, _, _ = self.sdata.scatter(axd=ax1,scalebar=scalebar,cmap=cmap,  ** kwargs)
+        sc2, _, _ = self.sdata.scatter(
+            axd=ax1, scalebar=scalebar, cmap=cmap,  ** kwargs)
 
         ax2 = plt.subplot2grid((3, 2), (0, 1), 2, 1)
-        self.sdata.graph.plot_umap(cmap=cmap,**kwargs)
-
-
+        self.sdata.graph.plot_umap(cmap=cmap, **kwargs)
 
     def _untangle_text(self, cogs, untangle_rounds=50, min_distance=0.5):
         knn = NearestNeighbors(n_neighbors=2)
