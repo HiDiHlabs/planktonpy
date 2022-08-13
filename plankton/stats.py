@@ -1,3 +1,4 @@
+from weakref import ref
 from scipy.signal import fftconvolve
 import numpy as np
 from scipy import signal, fft as sp_fft
@@ -65,6 +66,19 @@ def get_histograms(sdata, category=None,resolution=5):
 
 import pdb;
 
+def _interpolate(x,y,step):
+    """_interpolat generates linear interpolation from the x,y to create mutual distance curves in um units
+
+    :param x: distances with available values
+    :type x: np.array
+    :param y: values at x
+    :type y: np array
+    :param step: step size of x,y
+    :type step: float
+    """
+
+    return np.apply_along_axis(lambda x_: np.interp(np.arange(0,x.max()*step),x*step,x_,),2,y)
+
 def co_occurrence(sdata, resolution=5.0, max_radius=400, linear_steps=5, category=None):
     """co_occurrence _summary_
 
@@ -118,7 +132,7 @@ def co_occurrence(sdata, resolution=5.0, max_radius=400, linear_steps=5, categor
             co_occurrences[i,j] = h2_product.sum(axis=(1,2))
             co_occurrences[j,i]= co_occurrences[i,j]
 
-    return radii, co_occurrences
+    return _interpolate(radii, co_occurrences,resolution)
 
 def ripleys_k(sdata, resolution=5, max_radius=400, linear_steps=5, category=None):
 
@@ -159,3 +173,26 @@ def ripleys_k(sdata, resolution=5, max_radius=400, linear_steps=5, category=None
             co_occurrences[j,i]= co_occurrences[i,j]
 
     return radii, co_occurrences
+
+def mor_normalize(stats1,stats2):
+    """mor_normalize _summary_
+
+    :param stats1: _description_
+    :type stats1: _type_
+    :param stats2: _description_
+    :type stats2: _type_
+    """
+
+    gmean = (stats1.counts*stats2.counts)**0.5
+
+    ref_ratios_1 = (stats1.counts/gmean).fillna(0)
+    ref_ratios_2 = (stats2.counts/gmean).fillna(0)
+
+    norm_factor_1  = np.median(ref_ratios_1)
+    norm_factor_2  = np.median(ref_ratios_2)
+
+    normalized_1 = stats1.counts/norm_factor_1
+    normalized_2 = stats2.counts/norm_factor_2
+
+    return normalized_1,normalized_2
+    

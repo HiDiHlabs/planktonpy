@@ -248,8 +248,8 @@ def get_histograms(sdata, mins=None, maxs=None, category=None, resolution=5):
 
 
 def crosscorr(x, y):
-    x -= x.mean(1)[:, None]
-    y -= y.mean(1)[:, None]
+    x -= np.array(x.mean(1))[:, None]
+    y -= np.array(y.mean(1))[:, None]
     c = (np.dot(x, y.T)/x.shape[1]).squeeze()
 
     return np.nan_to_num(np.nan_to_num(c/np.array(x.std(1))[:, None])/np.array(y.std(1))[None, :])
@@ -338,7 +338,7 @@ def ssam(sdata, signatures=None, adata_obs_label='celltype', kernel_bandwidth=2.
 
 
 def localmax_sampling(sdata, n_clusters=10, min_distance=3, bandwidth=4):
-    n_bins = np.array(sdata.spatial.shape)
+    n_bins = np.array(sdata.spatial.shape).astype(int)
 
     vf = (gaussian_filter(np.histogram2d(
         *sdata.coordinates.T, bins=n_bins)[0], 2))
@@ -357,9 +357,9 @@ def localmax_sampling(sdata, n_clusters=10, min_distance=3, bandwidth=4):
         counts[np.arange(dists.shape[0]), neighbor_types[:, i]
                ] += kernel(dists[:, i])
 
-    assert (all(counts.sum(1)) > 0)
+    # assert (all(counts.sum(1)) > 0)
 
-    counts=counts/counts.sum(1)[:,None]
+    counts=np.nan_to_num(counts/counts.sum(1)[:,None])
 
     ica = FastICA(n_components=30)
     facs = ica.fit_transform(counts)
