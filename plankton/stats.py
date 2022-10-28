@@ -45,10 +45,10 @@ def _get_kernels(max_radius, linear_steps):
 
     return (kernels,vals)
 
-def get_histograms(sdata, category=None,resolution=5):
+def get_histograms(sdata, category=None,resolution=5, mins=None, maxs=None):
 
-    mins = sdata.coordinates.min(0)
-    maxs = sdata.coordinates.max(0)
+    if mins is None: mins = sdata.coordinates.min(0)
+    if maxs is None: maxs = sdata.coordinates.max(0)
 
     n_bins = np.ceil(np.divide(maxs-mins, resolution)).astype(int)
 
@@ -64,9 +64,11 @@ def get_histograms(sdata, category=None,resolution=5):
 
     return histograms
 
-import pdb;
+# import pdb;
 
 def _interpolate(x,y,step):
+
+    from scipy import interpolate 
     """_interpolat generates linear interpolation from the x,y to create mutual distance curves in um units
 
     :param x: distances with available values
@@ -77,7 +79,11 @@ def _interpolate(x,y,step):
     :type step: float
     """
 
-    return np.apply_along_axis(lambda x_: np.interp(np.arange(0,x.max()*step),x*step,x_,),2,y)
+    # return lambda x_ :  interpolate.BSpline(*interpolate.splrep(x,y,s=0,k=5), extrapolate=False)
+
+    return np.apply_along_axis(lambda x_ :  interpolate.BSpline(*interpolate.splrep(x,x_,s=0,k=5), extrapolate=False)(np.arange(0,x.max()*step)),2,y)
+    # return lambda x_ : np.apply_along_axis( Akima1DInterpolator(x,x_)(np.arange(0,x.max()*step)),2,y)
+        # return np.apply_along_axis(lambda x_: np.interp(np.arange(0,x.max()*step),x*step,x_,),2,y)
 
 def co_occurrence(sdata, resolution=5.0, max_radius=400, linear_steps=5, category=None):
     """co_occurrence _summary_
@@ -133,6 +139,75 @@ def co_occurrence(sdata, resolution=5.0, max_radius=400, linear_steps=5, categor
             co_occurrences[j,i]= co_occurrences[i,j]
 
     return _interpolate(radii, co_occurrences,resolution)
+    # return radii, co_occurrences
+
+
+def co_cooccurrence(sdata_0, sdata_1, resolution=5.0, max_radius=400, linear_steps=5, category=None):
+    """co_occurrence _summary_
+
+    :param sdata: SpatialData - all spots contained in sdata will be analysed. 
+    :type sdata: SpatialData
+    :param resolution: Smallest resolution of the co-occurence model in um, defaults to 5.
+    :type resolution: float, optional
+    :param max_radius: Largest radius of the co-occurrence model in um, defaults to 400.
+    :type max_radius: float, optional
+    :param linear_steps: Number of linear steps to model local heterogeniety. Afterwards, distance bins get wider to save computational resources, defaults to 5
+    :type linear_steps: int, optional
+    :param category: Category to model the co-occurrence of. Must be a column in 'sdata' with dtype 'category'. When given 'None', the algorithm defaults to gene labels.
+    :type category: str, optional
+    :return: _description_
+    :rtype: _type_
+    """
+
+    mins = np.min([sdata_0.coordinates.min(
+        0), sdata_1.coordinates.min(0)], axis=0)
+    maxs = np.max([sdata_0.coordinates.max(
+        0), sdata_1.coordinates.max(0)], axis=0)
+
+    hists_0 = get_histograms(sdata_0, mins=mins, maxs=maxs, category=category)
+    hists_1 = get_histograms(sdata_1, mins=mins, maxs=maxs, category=category)
+
+    # return hists_0, hists_1
+
+    if max_radius is None:
+        max_radius = np.ceil(np.min(hists_0[0].shape)/4).astype(int)
+    else:
+        max_radius = np.ceil(max_radius/resolution).astype(int)
+    if (linear_steps is None) or (linear_steps >= max_radius):
+        linear_steps = min(max_radius, 20)
+
+    kernels, radii = _get_kernels(max_radius, linear_steps)
+
+    co_occurrences = np.zeros((len(hists_0), len(hists_1), len(kernels),))
+
+    shape = [hists_0[0].shape[a]+kernels[0].shape[a]-1 for a in [0, 1]]
+    fshape = [sp_fft.next_fast_len(shape[a], True) for a in [0, 1]]
+
+    kernels_fft = (sp_fft.rfftn(kernels, fshape, axes=[1, 2]))
+
+    width_kernel = kernels[0].shape[0]
+
+    for i in range(len(hists_0)):
+        print(i)
+        h1_fft = sp_fft.rfftn(hists_0[i], fshape, axes=[0, 1])
+        h1_fftprod = (h1_fft*kernels_fft)
+        h1_conv = sp_fft.irfftn(h1_fftprod, fshape, axes=[1, 2])
+        h1_conv_ = h1_conv[:, width_kernel//2:width_kernel//2+hists_0[0].shape[0],
+                           width_kernel//2:width_kernel//2+hists_0[0].shape[1]]  # signal._signaltools._centered(h1_conv,[len(kernels)]+fshape).copy()
+
+        # h1_product = h1_conv_*hists_0[i] / \
+        #     np.sum(kernels, axis=(1, 2))[:, None, None]
+        # co_occurrences[i, i] = h1_product.sum(axis=(1, 2))
+
+        for j in range(i, len(hists_1)):
+            h2_product = h1_conv_*hists_1[j] / \
+                np.sum(kernels, axis=(1, 2))[:, None, None]
+            co_occurrences[i, j] = h2_product.sum(axis=(1, 2))
+            # co_occurrences[j, i] = co_occurrences[i, j]
+
+    return _interpolate(radii, co_occurrences, resolution)
+    # return radii, co_occurrences
+
 
 def ripleys_k(sdata, resolution=5, max_radius=400, linear_steps=5, category=None):
 

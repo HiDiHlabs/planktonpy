@@ -1,9 +1,9 @@
 
-from __future__ import annotations
+# from __future__ import annotations
 from tokenize import group
 
 from matplotlib import cm
-from yaml import scan
+# from yaml import scan
 # from sympy import N
 from plankton.graph import SpatialGraph
 from plankton.pixelmaps import PixelMap, PixelMask
@@ -445,8 +445,8 @@ class SpatialIndexer():
         return self.crop(xlims, ylims)
 
 
-class ObscDF(pd.DataFrame):
-    """ObscDF A dataframe encoding gene-centric observations.
+class VarDF(pd.DataFrame):
+    """VarDF A dataframe encoding gene-centric observations.
 
     :param sdata: Source data
     :type sdata: plankton.SpatialData
@@ -456,7 +456,7 @@ class ObscDF(pd.DataFrame):
 
     def __init__(self, sdata, assign_colors=True):
 
-        super(ObscDF, self).__init__(index=sdata.stats.index)
+        super(VarDF, self).__init__(index=sdata.stats.index)
         self['genes'] = self.index
         if assign_colors:
             self.assign_colors()
@@ -498,7 +498,7 @@ class ObscDF(pd.DataFrame):
         return(self.loc[self.sdata.g][label])
 
     def copy(self):
-        return ObscDF(self.sdata)
+        return VarDF(self.sdata)
 
 
 class SpatialData(pd.DataFrame):
@@ -516,8 +516,8 @@ class SpatialData(pd.DataFrame):
     :type scanpy: plankton.ScanpyDataFrame, optional
     :param synchronize: Whether the different data modalities should be cropped and synchronized at all times. defaults to True
     :type synchronize: bool, optional
-    :param obsc: A data frame for gene-centric information, defaults to None
-    :type obsc: plankton.ObscDF, optional
+    :param var: A data frame for gene-centric information, defaults to None
+    :type var: plankton.VarDF, optional
     """
 
     def __init__(self,
@@ -527,7 +527,7 @@ class SpatialData(pd.DataFrame):
                  pixel_maps={},
                  scanpy=None,
                  synchronize=True,
-                 obsc=None):
+                 var=None):
 
         # Initiate 'own' spot data:
         super(SpatialData, self).__init__({
@@ -540,10 +540,10 @@ class SpatialData(pd.DataFrame):
 
         self.stats = PointStatistics(self)
 
-        if obsc is None:
-            self.obsc = ObscDF(self)
+        if var is None:
+            self.var = VarDF(self)
         else:
-            self.obsc = obsc
+            self.var = var
 
         self.graph = SpatialGraph(self)
 
@@ -572,10 +572,15 @@ class SpatialData(pd.DataFrame):
         else:
             self.scanpy = None
 
-        # self.obsm = {"spatial":np.array(self.coordinates).T}
+        self.obsm = {"spatial":np.array(self.coordinates)}
         # self.obs = pd.DataFrame({'gene':self.g})
         self.uns = {}
+
         self.obsp = {}
+        # self.obsm = {}
+
+        self.varp = {}
+        self.varm = {}
 
     @property
     def gene_ids(self):
@@ -621,17 +626,20 @@ class SpatialData(pd.DataFrame):
                                        shape=(len(self.g), self.genes.shape[0],))
 
     @property
-    def var(self):
-        return pd.DataFrame(index=self.stats.genes)
+    def var_names(self):
+        return self.var.columns
+    # @property
+    # def var(self):
+    #     return pd.DataFrame(index=self.stats.genes)
 
     @property
     def obs(self):
         # pd.DataFrame({'gene': self.g}).astype(str).astype('category')
         return self
 
-    @property
-    def obsm(self):
-        return {"spatial": self.coordinates}
+    # @property
+    # def obsm(self):
+    #     return {"spatial": self.coordinates}
 
     def __getitem__(self, *arg):
 
@@ -672,12 +680,12 @@ class SpatialData(pd.DataFrame):
                                     self.pixel_maps,
                                     scanpy=scanpy,
                                     synchronize=synchronize,
-                                    obsc=self.obsc.copy())
+                                    var=self.var.copy())
 
-            new_prop_entries = self.obsc.loc[new_frame.genes]
-            new_frame.obsc[new_prop_entries.columns] = new_prop_entries
-            new_frame.obsc.sdata = new_frame
-            new_frame.obsc.drop(self.genes.symmetric_difference(
+            new_prop_entries = self.var.loc[new_frame.genes]
+            new_frame.var[new_prop_entries.columns] = new_prop_entries
+            new_frame.var.sdata = new_frame
+            new_frame.var.drop(self.genes.symmetric_difference(
                 new_frame.genes), inplace=True)
 
             for c in self.columns[4:]:
@@ -755,12 +763,12 @@ class SpatialData(pd.DataFrame):
                                 self.pixel_maps,
                                 scanpy=self.scanpy,
                                 synchronize=False,
-                                obsc=self.obsc.copy())
+                                var=self.var.copy())
 
-        new_prop_entries = self.obsc.loc[new_frame.genes]
-        new_frame.obsc[new_prop_entries.columns] = new_prop_entries
-        new_frame.obsc.sdata = new_frame
-        new_frame.obsc.drop(self.genes.symmetric_difference(
+        new_prop_entries = self.var.loc[new_frame.genes]
+        new_frame.var[new_prop_entries.columns] = new_prop_entries
+        new_frame.var.sdata = new_frame
+        new_frame.var.drop(self.genes.symmetric_difference(
             new_frame.genes), inplace=True)
 
         for c in self.columns[4:]:
@@ -812,7 +820,7 @@ class SpatialData(pd.DataFrame):
         :type c: list(float),list(rgb), optional
         :param color: Marker color, defaults to None
         :type color: str, optional
-        :param color_prop: column name in self.obsc, used as a color source, defaults to 'genes'
+        :param color_prop: column name in self.var, used as a color source, defaults to 'genes'
         :type color_prop: str, optional
         :param marker: Marker shape, defaults to '.'
         :type marker: str, optional
@@ -846,13 +854,13 @@ class SpatialData(pd.DataFrame):
 
         if c is None:
             if color is None:
-                c = self.obsc.project('c_'+color_prop)
+                c = self.var.project('c_'+color_prop)
 
         if legend:
-            # sorted(self.obsc[color_prop].unique())
+            # sorted(self.var[color_prop].unique())
             labels = self.g.unique().sort_values()
             # print(labels)
-            clrs = [self.obsc[(self.obsc[color_prop] == l)]
+            clrs = [self.var[(self.var[color_prop] == l)]
                     ['c_'+color_prop][0] for l in labels]
 
             handles = [plt.scatter([], [], color=c) for c in clrs]
@@ -928,7 +936,7 @@ class SpatialData(pd.DataFrame):
     def scatter_js(self, color_prop='c_genes'):
         """umap_js: A javascript-based display and selection function for the spatial source data and generated UMAP embedding. Can be used to understand UMAP agglomerations by displaying their gene compositions and projecting them back onto the original source data coordinates.
 
-        :param color_prop: Property by which to color the spots in the scatter plots of the source data coordinates as well as the UMAP representation. Needs to be a column in sdata.obsc, defaults to 'c_genes'
+        :param color_prop: Property by which to color the spots in the scatter plots of the source data coordinates as well as the UMAP representation. Needs to be a column in sdata.var, defaults to 'c_genes'
         :type color_prop: str, optional
         :return: plotly HTML/javascript widget that displays in the jupyter notebook.
         :rtype: plotly.Widget
@@ -940,7 +948,7 @@ class SpatialData(pd.DataFrame):
                                      y=self.y,
                                      mode='markers',
                                      marker=dict(
-                                         color=self.obsc.project(color_prop)),
+                                         color=self.var.project(color_prop)),
                                      hoverinfo='none', meta={'name': 'tissue-scatter'},
                                      unselected={'marker': {
                                          'color': 'black', 'opacity': 0.2}},
@@ -948,7 +956,7 @@ class SpatialData(pd.DataFrame):
 
         f_scatter = go.FigureWidget(trace_scatter,)
 
-        colors = self.obsc.loc[self.stats.sort_values(
+        colors = self.var.loc[self.stats.sort_values(
             'counts')[-n_bars:].index, color_prop].values
 
         w_bars = go.Bar(x=self.stats.sort_values('counts')[-n_bars:].index,
@@ -987,11 +995,13 @@ class SpatialData(pd.DataFrame):
 
         out = widgets.Output(layout={'border': '1px solid black'})
 
+        print('kewl')
+
         def update_bars(plot, points, selector):
 
             subset = self[np.array(points.point_inds)]
 
-            colors = subset.obsc.loc[subset.stats.sort_values(
+            colors = subset.var.loc[subset.stats.sort_values(
                 'counts')[-n_bars:].index, color_prop].values
             colors = ['rgb'+str(tuple((np.array(c)*256).astype(int)))
                       for c in colors]
@@ -1006,7 +1016,7 @@ class SpatialData(pd.DataFrame):
                 (self.stats.loc[subset.stats.index].counts)
             idcs = np.argsort(vals)
 
-            colors = subset.obsc[color_prop][idcs]
+            colors = subset.var[color_prop][idcs]
             colors = ['rgb'+str(tuple((np.array(c)*256).astype(int)))
                       for c in colors]
             ys = vals[idcs]
@@ -1020,7 +1030,7 @@ class SpatialData(pd.DataFrame):
                 subset)/len(self))
             idcs = np.argsort(vals)
 
-            colors = subset.obsc[color_prop][idcs]
+            colors = subset.var[color_prop][idcs]
             colors = ['rgb'+str(tuple((np.array(c)*256).astype(int)))
                       for c in colors]
             ys = vals[idcs]
@@ -1187,9 +1197,8 @@ class SpatialData(pd.DataFrame):
         :type path: str
         """
         pickle.dump({'sdata': self, 'graph': self.graph,
-                    'obsc': self.obsc, 'pixel_maps': self.pixel_maps}, open(path, "wb"))
+                    'var': self.var, 'pixel_maps': self.pixel_maps}, open(path, "wb"))
 
-# here starts plotting.py
 
 
 def load(path):
@@ -1209,6 +1218,32 @@ def load(path):
         sdata[c] = data['sdata'][c]
     sdata.graph = data['graph']
     sdata.graph.sdata = sdata
-    sdata.obsc = data['obsc']
-    sdata.obsc.sdata = sdata
+    sdata.var = data['var']
+    sdata.var.sdata = sdata
+    return sdata
+
+def load_legacy(path):
+    """load: Loads a spatial data set from a disk file.
+
+    :param path: File path/name
+    :type path: str
+    :return: spatial data set
+    :rtype: plankton.SpatialData
+    """
+    data = pickle.load(open(path, "rb"))
+    sdata = SpatialData(data['sdata']['g'], data['sdata']
+                        ['x'], data['sdata']['y'], pixel_maps=data['pixel_maps'])
+    print(data['sdata'].columns)
+
+    for i, c in enumerate(data['sdata'].columns[4:]):
+        sdata[c] = data['sdata'][c]
+    sdata.graph = data['graph']
+    sdata.graph.sdata = sdata
+
+    if 'var' in data.keys():
+        sdata.var=data['var']
+    else:
+        sdata.var=data['obsc']
+
+    sdata.var.sdata = sdata
     return sdata

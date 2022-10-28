@@ -1,3 +1,4 @@
+from pyexpat import XML_PARAM_ENTITY_PARSING_ALWAYS
 from typing import Union
 import collections
 
@@ -42,7 +43,7 @@ class PixelMap():
             data = self.data
 
         if axd is None:
-            axd = plt.subplot(111)
+            axd = plt.gca()
 
         if cmap is None:
             cmap = self.cmap
@@ -107,6 +108,8 @@ class PixelMap():
         values[~valid] = padding_value
         values[valid] = self.data[x[valid],y[valid]]
         return values
+
+
 
 
 
@@ -175,3 +178,21 @@ class PixelMask(PixelMap):
             x_shift=x_shift,
             y_shift=y_shift
         )
+
+# decorate PixelMap to overload python operators:
+
+def overload_operator(name):
+
+    def apply(self,*args): 
+        # getattr(self.data   , name)(*args)
+        pixel_map_ = self[:]
+        pixel_map_.data = getattr(self.data, name)(*args)
+        return pixel_map_
+
+    return apply
+    # return lambda self, *args: PixelMap(getattr(self.data, name)(*args), self.info)
+
+for name in ["__add__", "__sub__", "__mul__", "__truediv__", "__floordiv__", "__invert__", "__neg__", "__pos__",
+            "__lt__","__le__","__eq__","__ne__","__ge__","__gt__",]:
+    setattr(PixelMap, name, overload_operator(name))
+
