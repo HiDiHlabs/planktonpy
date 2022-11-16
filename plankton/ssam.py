@@ -68,6 +68,10 @@ def fill_celltypemaps(ct_map, fill_blobs=True, min_blob_area=0, filter_params={}
 
     return filtered_ctmaps
 
+def get_histogram(coords,n_bins,mins,maxs):
+    # print(coords.shape)
+    return np.histogram2d(
+                *coords.T, bins=n_bins, range=([mins[0], maxs[0]], [mins[1], maxs[1]]))[0]
 
 def get_histograms(sdata, mins=None, maxs=None, category=None, resolution=5):
 
@@ -84,9 +88,12 @@ def get_histograms(sdata, mins=None, maxs=None, category=None, resolution=5):
     histograms = []
 
     if category is None:
-        for gene in sdata.genes:
-            histograms.append(np.histogram2d(
-                *sdata[sdata.g == gene].coordinates.T, bins=n_bins, range=([mins[0], maxs[0]], [mins[1], maxs[1]]))[0])
+        pool = Pool()
+        split_coords = [[sdata[sdata.g == g].coordinates, n_bins,[mins[0], maxs[0]], [mins[1], maxs[1]] ] for g in sdata.genes]
+        histograms = pool.starmap( get_histogram,split_coords  )
+        # for gene in sdata.genes:
+        #     histograms.append(np.histogram2d(
+        #         *sdata[sdata.g == gene].coordinates.T, bins=n_bins, range=([mins[0], maxs[0]], [mins[1], maxs[1]]))[0])
 
     else:
         for c in sdata[category].cat.categories:
