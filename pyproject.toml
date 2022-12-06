@@ -30,6 +30,7 @@ dependencies = [
           'scikit-image',
         'scikit-learn',
           'umap-learn',
+          'python-louvain',
 ]
 [project.urls]
 "Homepage" = "https://github.com/HiDiHlabs/planktonpy"

@@ -68,10 +68,6 @@ def fill_celltypemaps(ct_map, fill_blobs=True, min_blob_area=0, filter_params={}
 
     return filtered_ctmaps
 
-def get_histogram(coords,n_bins,mins,maxs):
-    # print(coords.shape)
-    return np.histogram2d(
-                *coords.T, bins=n_bins, range=([mins[0], maxs[0]], [mins[1], maxs[1]]))[0]
 
 def get_histograms(sdata, mins=None, maxs=None, category=None, resolution=5):
 
@@ -88,12 +84,10 @@ def get_histograms(sdata, mins=None, maxs=None, category=None, resolution=5):
     histograms = []
 
     if category is None:
-        pool = Pool()
-        split_coords = [[sdata[sdata.g == g].coordinates, n_bins,[mins[0], maxs[0]], [mins[1], maxs[1]] ] for g in sdata.genes]
-        histograms = pool.starmap( get_histogram,split_coords  )
-        # for gene in sdata.genes:
-        #     histograms.append(np.histogram2d(
-        #         *sdata[sdata.g == gene].coordinates.T, bins=n_bins, range=([mins[0], maxs[0]], [mins[1], maxs[1]]))[0])
+        print(mins,maxs)
+        for gene in sdata.genes:
+            histograms.append(np.histogram2d(
+                *sdata[sdata.g == gene].coordinates.T, bins=n_bins, range=([mins[0], maxs[0]], [mins[1], maxs[1]]))[0])
 
     else:
         for c in sdata[category].cat.categories:
@@ -109,7 +103,6 @@ def crosscorr(x, y):
     c = (np.dot(x, y.T)/x.shape[1]).squeeze()
 
     return np.nan_to_num(np.nan_to_num(c/np.array(x.std(1))[:, None])/np.array(y.std(1))[None, :])
-
 
 def ssam(sdata, signatures=None, adata_obs_label='celltype', kernel_bandwidth=2.5, output_um_p_px=5,
          patch_length=1000, threshold_exp=0.1, threshold_cor=0.1, background_value=-1,
