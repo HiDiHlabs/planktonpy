@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "planktonspace"
-version = "0.0.5"
+version = "0.0.6"
 authors = [
   { name="Sebastian Tiesmeyer", email="sebastian.tiesmeyer@bih-charite.de" },
 ]
@@ -30,6 +30,7 @@ dependencies = [
           'scikit-image',
         'scikit-learn',
           'umap-learn',
+          'python-louvain',
 ]
 [project.urls]
 "Homepage" = "https://github.com/HiDiHlabs/planktonpy"

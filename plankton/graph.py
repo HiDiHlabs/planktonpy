@@ -215,6 +215,8 @@ class SpatialGraph():
                 y_ = 0
                 _y = 1
 
+            print(axd)
+
             con = ConnectionPatch(xyA=(dem_plots[i], y_),
                                   coordsA=axd['bar'].transData,
                                   xyB=(np.mean(axd[plot_name].get_xlim()),
@@ -250,7 +252,7 @@ class SpatialGraph():
 
         return counts
 
-    def run_umap(self, bandwidth=1, kernel=None, metric='euclidean', zero_weight=1.0, cutoff=None, *args, **kwargs):
+    def run_umap(self, bandwidth=1, kernel=None, metric='euclidean', zero_weight=1.0, cutoff=None, random_state=None, *args, **kwargs):
         """run_umap: Creates a UMAP representation of recurring local contexts in the source data.
 
         :param bandwidth: Bandwidth of the default Gaussian kernel used to build local environment models, defaults to 1
@@ -261,6 +263,8 @@ class SpatialGraph():
         :type metric: str, callable, optional
         :param zero_weight: Regularization parameter that adds information of each spot's gene label to its local context model. High value encourages spots to form clusters with spots of their own gene label, defaults to 1
         :type zero_weight: float, optional
+        :param random_state: Random state to initialize UMAP and FastICA.
+        :type random_state: int
         """
         # print(kwargs)
         counts = self._determine_counts(
@@ -277,7 +281,7 @@ class SpatialGraph():
             # counts[:,:cutoff] = facs[:,:cutoff]
 
             print(f'Reducing dimensions with FastICA')
-            ica = FastICA(n_components=cutoff)
+            ica = FastICA(n_components=cutoff,random_state=random_state)
             counts = ica.fit_transform(counts)
 
             # counts[:,cutoff:] = facs
@@ -285,7 +289,7 @@ class SpatialGraph():
             print('Calculating UMAP embedding.')
             # counts[:,-1]=facs[:,cutoff:].sum(1)
 
-        umap = UMAP(metric=metric, *args, **kwargs)
+        umap = UMAP(metric=metric, random_state=random_state, *args, **kwargs)
         self._umap = umap.fit_transform(counts)
 
     def plot_umap(self, color_prop='genes', text_prop=None,
@@ -294,8 +298,8 @@ class SpatialGraph():
 
         embedding = self.umap
 
-        categories = self.sdata.obsc[color_prop].unique()
-        colors = self.sdata.obsc.project('c_'+color_prop)
+        categories = self.sdata.var[color_prop].unique()
+        colors = self.sdata.var.project('c_'+color_prop)
 
         if color is not None:
             colors = (color,)*len(self.sdata)
@@ -303,7 +307,7 @@ class SpatialGraph():
             colors = c
 
         if legend:
-            handlers = [plt.scatter([], [], color=self.sdata.obsc[self.sdata.obsc[color_prop]
+            handlers = [plt.scatter([], [], color=self.sdata.var[self.sdata.var[color_prop]
                                     == c]['c_'+color_prop][0]) for c in sorted(categories)]
             plt.legend(handlers, sorted(categories))
 
@@ -321,16 +325,16 @@ class SpatialGraph():
                             embedding[:, 1].min():embedding[:, 1].max():100j]
             positions = np.vstack([X.ravel(), Y.ravel()])
 
-            for i, g in enumerate(self.sdata.obsc[text_prop].unique()):
+            for i, g in enumerate(self.sdata.var[text_prop].unique()):
                 if text_color_prop is not None:
-                    fontcolor = self.sdata.obsc[self.sdata.obsc[text_prop]
+                    fontcolor = self.sdata.var[self.sdata.var[text_prop]
                                                 == g]['c_'+text_color_prop][0]
                 else:
                     fontcolor = 'w'
 
                 # try:
                 embedding_subset = embedding[self.sdata.g.isin(
-                    self.sdata.obsc[self.sdata.obsc[text_prop] == g].index)].T
+                    self.sdata.var[self.sdata.var[text_prop] == g].index)].T
                 if embedding_subset.shape[1] > 2:
                     kernel = scipy.stats.gaussian_kde(embedding_subset)
 
@@ -367,7 +371,7 @@ class SpatialGraph():
     def umap_js(self, color_prop='c_genes'):
         """umap_js: A javascript-based display and selection function for the spatial source data and generated UMAP embedding. Can be used to understand UMAP agglomerations by displaying their gene compositions and projecting them back onto the original source data coordinates.
 
-        :param color_prop: Property by which to color the spots in the scatter plots of the source data coordinates as well as the UMAP representation. Needs to be a column in sdata.obsc, defaults to 'c_genes'
+        :param color_prop: Property by which to color the spots in the scatter plots of the source data coordinates as well as the UMAP representation. Needs to be a column in sdata.var, defaults to 'c_genes'
         :type color_prop: str, optional
         :return: plotly HTML/javascript widget that displays in the jupyter notebook.
         :rtype: plotly.Widget
@@ -379,7 +383,7 @@ class SpatialGraph():
                                         y=self.sdata.y,
                                         mode='markers',
                                         marker=dict(
-                                            color=self.sdata.obsc.project(color_prop)),
+                                            color=self.sdata.var.project(color_prop)),
                                         hoverinfo='none', meta={'name': 'tissue-scatter'},
                                         unselected={'marker': {
                                             'color': 'black', 'opacity': 0.2}},
@@ -391,13 +395,13 @@ class SpatialGraph():
                                               y=self.sdata.graph.umap[:, 1],
                                               mode='markers',
                                               marker=dict(
-                                                  color=self.sdata.obsc.project(color_prop)),
+                                                  color=self.sdata.var.project(color_prop)),
                                               unselected={'marker': {
                                                   'color': 'black', 'opacity': 0.2}},
                                               hoverinfo='none', meta={'name': 'umap-scatter'}),
                                  )
 
-        colors = self.sdata.obsc.loc[self.sdata.stats.sort_values(
+        colors = self.sdata.var.loc[self.sdata.stats.sort_values(
             'counts')[-n_bars:].index, color_prop].values
 
         w_bars = go.Bar(x=self.sdata.stats.sort_values('counts')[-n_bars:].index,
@@ -441,11 +445,12 @@ class SpatialGraph():
                 f_umap.data[0].selectedpoints = plot.selectedpoints
 
             else:
+                print(f_scatter.data)
                 f_scatter.data[-1].selectedpoints = plot.selectedpoints
 
             subset = self.sdata[np.array(points.point_inds)]
 
-            colors = subset.obsc.loc[subset.stats.sort_values(
+            colors = subset.var.loc[subset.stats.sort_values(
                 'counts')[-n_bars:].index, color_prop].values
             colors = ['rgb'+str(tuple((np.array(c)*256).astype(int)))
                       for c in colors]
@@ -460,7 +465,7 @@ class SpatialGraph():
                 (self.sdata.stats.loc[subset.stats.index].counts)
             idcs = np.argsort(vals)
 
-            colors = subset.obsc[color_prop][idcs]
+            colors = subset.var[color_prop][idcs]
             colors = ['rgb'+str(tuple((np.array(c)*256).astype(int)))
                       for c in colors]
             ys = vals[idcs]
@@ -474,7 +479,7 @@ class SpatialGraph():
                 subset)/len(self.sdata))
             idcs = np.argsort(vals)
 
-            colors = subset.obsc[color_prop][idcs]
+            colors = subset.var[color_prop][idcs]
             colors = ['rgb'+str(tuple((np.array(c)*256).astype(int)))
                       for c in colors]
             ys = vals[idcs]
@@ -523,7 +528,7 @@ class SpatialGraph():
                      **kwargs):
         """map_and_umap: Plots a side-by-side representation of the available UMAP- and coordinate data, with styling arguments passed to both plotting functions. 
 
-        :param color_prop: Property to color the individual markers by. Needs to be a column in self.sdata.obsc, defaults to None
+        :param color_prop: Property to color the individual markers by. Needs to be a column in self.sdata.var, defaults to None
         :type color_prop: _type_, optional
         :param scalebar: Whether to display a scalebar in the coordinate representation, defaults to True
         :type scalebar: bool, optional
